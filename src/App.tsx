@@ -578,46 +578,38 @@ export default function App() {
 
       <main className="max-w-5xl mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        {/* Mobile Filters (Visible only on mobile/tablet) */}
-        <div className="lg:hidden flex flex-col gap-3 bg-white p-4 rounded-2xl border border-zinc-200 shadow-sm mb-2">
-          <div className="flex items-center gap-2">
-            <Search className="w-4 h-4 text-zinc-400" />
+        {/* Mobile Filters (Compact Row) */}
+        <div className="lg:hidden flex items-center gap-2 bg-white p-2 rounded-2xl border border-zinc-200 shadow-sm mb-2 overflow-x-auto no-scrollbar">
+          <div className="relative flex-1 min-w-[140px]">
+            <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-400" />
             <input 
               type="text" 
               placeholder="بحث بالسائق..." 
-              className="w-full bg-zinc-50 border-none focus:ring-0 text-sm py-2 rounded-lg"
+              className="w-full bg-zinc-50 border-none focus:ring-1 focus:ring-emerald-500/20 text-xs py-2 pr-8 rounded-xl font-medium"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-black text-zinc-400 mr-2">المصنع</label>
-              <select 
-                className="bg-zinc-50 border-zinc-100 rounded-xl text-xs font-bold py-2.5 px-3"
-                value={factoryFilter}
-                onChange={(e) => setFactoryFilter(e.target.value)}
-              >
-                <option value="">كل المصانع</option>
-                {Array.from(new Set(drivers.map(d => d.factory))).filter(Boolean).sort().map(f => (
-                  <option key={f} value={f}>{f}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-1">
-              <label className="text-[10px] font-black text-zinc-400 mr-2">الترتيب</label>
-              <select 
-                className="bg-zinc-50 border-zinc-100 rounded-xl text-xs font-bold py-2.5 px-3"
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
-              >
-                <option value="code">بالكود</option>
-                <option value="name">بالاسم</option>
-                <option value="newest">الأحدث</option>
-                <option value="oldest">الأقدم</option>
-              </select>
-            </div>
-          </div>
+          <select 
+            className="bg-zinc-50 border-none rounded-xl text-[10px] font-bold py-2 px-2 min-w-[90px] focus:ring-1 focus:ring-emerald-500/20"
+            value={factoryFilter}
+            onChange={(e) => setFactoryFilter(e.target.value)}
+          >
+            <option value="">كل المصانع</option>
+            {Array.from(new Set(drivers.map(d => d.factory))).filter(Boolean).sort().map(f => (
+              <option key={f} value={f}>{f}</option>
+            ))}
+          </select>
+          <select 
+            className="bg-zinc-50 border-none rounded-xl text-[10px] font-bold py-2 px-2 min-w-[80px] focus:ring-1 focus:ring-emerald-500/20"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+          >
+            <option value="code">الكود</option>
+            <option value="name">الاسم</option>
+            <option value="newest">الأحدث</option>
+            <option value="oldest">الأقدم</option>
+          </select>
         </div>
         <div className="hidden lg:block lg:col-span-4 space-y-4">
           <div className="bg-white rounded-2xl border border-zinc-200 p-4 sticky top-24 max-h-[85vh] flex flex-col">
@@ -887,29 +879,6 @@ export default function App() {
                           <p className="text-sm font-black">{currentJobRecord?.netPay || 0}</p>
                         </div>
                       </div>
-
-                      {/* Share Button Section */}
-                      <motion.div 
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="flex gap-2"
-                      >
-                        <button 
-                          onClick={handleShareReport}
-                          className="flex-1 flex items-center justify-center gap-2 bg-zinc-900 text-white py-3.5 rounded-2xl text-xs font-bold shadow-lg hover:bg-black transition-all active:scale-95"
-                        >
-                          <Share2 className="w-4 h-4" />
-                          <span>مشاركة التقرير كصورة</span>
-                        </button>
-                        {currentDriver.mobile && (
-                          <button 
-                            onClick={handleShareReport}
-                            className="bg-emerald-100 text-emerald-700 font-bold px-5 rounded-2xl text-xs flex items-center gap-2 hover:bg-emerald-200 transition-colors"
-                          >
-                            شاركه الآن
-                          </button>
-                        )}
-                      </motion.div>
 
                       {/* Editor Sections Redesign */}
                       <div className="space-y-8 pb-20">
