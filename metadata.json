@@ -1,0 +1,6 @@
+{
+  "name": "Remix: DriverPay Manager - نظام إدارة قبض السائقين",
+  "description": "نظام متكامل لإدارة بيانات السائقين، تسجيل ورديات العمل، الخصومات، والسلف، مع إمكانية تصدير تقارير شهرية كصور أو ملفات إكسل.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

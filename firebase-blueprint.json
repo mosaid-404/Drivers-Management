@@ -1,0 +1,47 @@
+{
+  "entities": {
+    "Driver": {
+      "title": "Driver",
+      "description": "بيانات السائق الأساسية",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string", "description": "كود السائق" },
+        "name": { "type": "string", "description": "اسم السائق" },
+        "route": { "type": "string", "description": "الخط" },
+        "factory": { "type": "string", "description": "المصنع" },
+        "mobile": { "type": "string", "description": "رقم الموبايل" },
+        "status": { "type": "string", "enum": ["active", "retired"], "description": "حالة السائق (نشط أو ترك العمل)" },
+        "notes": { "type": "string", "description": "ملاحظات إضافية عن السائق" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["code", "name", "status"]
+    },
+    "JobRecord": {
+      "title": "Job Record",
+      "description": "بيانات شغل السائق شهرياً",
+      "type": "object",
+      "properties": {
+        "driverId": { "type": "string" },
+        "month": { "type": "string", "description": "الشهر (السنة-الشهر)" },
+        "items": { "type": "array", "description": "بنود الشغل (البيان والورادي والسعر)" },
+        "deductions": { "type": "array", "description": "الخصومات" },
+        "totalWork": { "type": "number" },
+        "totalDeductions": { "type": "number" },
+        "netPay": { "type": "number" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["driverId", "month"]
+    }
+  },
+  "firestore": {
+    "drivers": {
+      "schema": "Driver",
+      "description": "مجموعة السائقين"
+    },
+    "jobRecords": {
+      "schema": "JobRecord",
+      "description": "سجلات الشغل الشهرية لكل سائق"
+    }
+  }
+}
