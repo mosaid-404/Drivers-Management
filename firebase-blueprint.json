@@ -5,6 +5,7 @@
       "description": "بيانات السائق الأساسية",
       "type": "object",
       "properties": {
+        "userId": { "type": "string", "description": "معرف المستخدم المالك للبيانات" },
         "code": { "type": "string", "description": "كود السائق" },
         "name": { "type": "string", "description": "اسم السائق" },
         "route": { "type": "string", "description": "الخط" },
@@ -22,6 +23,7 @@
       "description": "بيانات شغل السائق شهرياً",
       "type": "object",
       "properties": {
+        "userId": { "type": "string", "description": "معرف المستخدم المالك للبيانات" },
         "driverId": { "type": "string" },
         "month": { "type": "string", "description": "الشهر (السنة-الشهر)" },
         "items": { "type": "array", "description": "بنود الشغل (البيان والورادي والسعر)" },

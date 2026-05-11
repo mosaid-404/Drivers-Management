@@ -94,7 +94,11 @@ export default function App() {
   
   const handleExportMonthlyReport = async () => {
     try {
-      const q = query(collection(db, 'jobRecords'), where('month', '==', selectedMonth));
+      const q = query(
+        collection(db, 'jobRecords'), 
+        where('userId', '==', user.uid),
+        where('month', '==', selectedMonth)
+      );
       const res = await getDocs(q);
       const records = res.docs.map(doc => doc.data() as JobRecord);
       
@@ -189,7 +193,11 @@ export default function App() {
       setDrivers([]);
       return;
     }
-    const q = query(collection(db, 'drivers'), orderBy('code', 'asc'));
+    const q = query(
+      collection(db, 'drivers'), 
+      where('userId', '==', user.uid),
+      orderBy('code', 'asc')
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setDrivers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as Driver));
     }, (err) => handleFirestoreError(err, OperationType.GET, 'drivers'));
@@ -323,6 +331,7 @@ export default function App() {
     }
 
     const driverData = {
+      userId: user.uid,
       code: formData.get('code') as string,
       name: formData.get('name') as string,
       route: formData.get('route') as string,
@@ -356,8 +365,10 @@ export default function App() {
       const [code, name, route, factory, carType, mobile] = line.split('\t').map(s => s?.trim());
       if (code && name) {
         await addDoc(collection(db, 'drivers'), {
+          userId: user.uid,
           code, name, route: route || '', factory: factory || '', carType: carType || '', mobile: mobile || '',
           status: 'active',
+          updatedAt: serverTimestamp(),
           createdAt: serverTimestamp(),
         });
       }
@@ -370,6 +381,7 @@ export default function App() {
     const recordId = `${currentDriver.id}_${selectedMonth}`;
     const baseRecord: JobRecord = currentJobRecord || {
       id: recordId,
+      userId: user.uid,
       driverId: currentDriver.id,
       month: selectedMonth,
       items: [],
@@ -380,7 +392,7 @@ export default function App() {
       updatedAt: serverTimestamp(),
     };
 
-    const newData = { ...baseRecord, ...updatedData, updatedAt: serverTimestamp() };
+    const newData = { ...baseRecord, ...updatedData, userId: user.uid, updatedAt: serverTimestamp() };
     
     // Recalculate totals
     newData.totalWork = newData.items.reduce((sum, item) => sum + (item.rounds * item.price), 0);
@@ -444,9 +456,10 @@ export default function App() {
   };
 
   const handleExportData = async () => {
+    if (!user) return;
     try {
-      const driversSnap = await getDocs(collection(db, 'drivers'));
-      const jobRecordsSnap = await getDocs(collection(db, 'jobRecords'));
+      const driversSnap = await getDocs(query(collection(db, 'drivers'), where('userId', '==', user.uid)));
+      const jobRecordsSnap = await getDocs(query(collection(db, 'jobRecords'), where('userId', '==', user.uid)));
       
       const data = {
         drivers: driversSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })),
@@ -500,7 +513,7 @@ export default function App() {
 
         const CHUNK_SIZE = 400;
         const allOps: { ref: any, data: any }[] = [];
-
+        
         // Prepare Driver Operations
         for (const driver of driversToImport) {
           const { id, createdAt: jsonCreatedAt, updatedAt: jsonUpdatedAt, ...driverData } = driver;
@@ -510,6 +523,7 @@ export default function App() {
             ref: doc(db, 'drivers', id),
             data: {
               ...driverData,
+              userId: user.uid, // Force current user ID
               createdAt: existingCreatedAt || serverTimestamp(), // Use existing if update, serverTimestamp if new
             }
           });
@@ -522,6 +536,7 @@ export default function App() {
             ref: doc(db, 'jobRecords', id),
             data: {
               ...recordData,
+              userId: user.uid, // Force current user ID
               updatedAt: serverTimestamp() // jobRecords rule requires this for any write
             }
           });
@@ -866,6 +881,7 @@ export default function App() {
                         onClick={() => {
                           const status = currentDriver.status === 'active' ? 'retired' : 'active';
                           updateDoc(doc(db, 'drivers', currentDriver.id), { 
+                            userId: user.uid,
                             status,
                             updatedAt: serverTimestamp()
                           });
@@ -1132,6 +1148,7 @@ export default function App() {
                             const notesArray = Array.isArray(currentDriver.notes) ? currentDriver.notes : [];
                             const updatedNotes = [newNote, ...notesArray];
                             updateDoc(doc(db, 'drivers', currentDriver.id), { 
+                              userId: user.uid,
                               notes: updatedNotes,
                               updatedAt: serverTimestamp()
                             });
@@ -1169,6 +1186,7 @@ export default function App() {
                                         n.id === note.id ? { ...n, isImportant: !n.isImportant } : n
                                       );
                                       updateDoc(doc(db, 'drivers', currentDriver.id), { 
+                                        userId: user.uid,
                                         notes: updatedNotes,
                                         updatedAt: serverTimestamp()
                                       });
@@ -1193,6 +1211,7 @@ export default function App() {
                                           n.id === note.id ? { ...n, text: e.target.value } : n
                                         );
                                         updateDoc(doc(db, 'drivers', currentDriver.id), { 
+                                          userId: user.uid,
                                           notes: updatedNotes,
                                           updatedAt: serverTimestamp()
                                         });
@@ -1206,6 +1225,7 @@ export default function App() {
                                         onClick={() => {
                                           const updatedNotes = currentDriver.notes?.filter(n => n.id !== note.id);
                                           updateDoc(doc(db, 'drivers', currentDriver.id), { 
+                                            userId: user.uid,
                                             notes: updatedNotes,
                                             updatedAt: serverTimestamp()
                                           });
@@ -1527,7 +1547,7 @@ export default function App() {
 
               <div className="flex-1 overflow-y-auto pr-1 no-scrollbar space-y-8">
                 {/* Stats Cards */}
-                <ReportsStats drivers={drivers} selectedMonth={selectedMonth} factoryFilter={factoryFilter} />
+                <ReportsStats userId={user.uid} drivers={drivers} selectedMonth={selectedMonth} factoryFilter={factoryFilter} />
 
                 {/* Factory Summaries */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1535,13 +1555,13 @@ export default function App() {
                     <h3 className="text-sm font-black text-zinc-800 mb-4 flex items-center gap-2">
                        <Filter className="w-4 h-4 text-blue-500" /> اجمالي المصانع
                     </h3>
-                    <FactoryBreakdown drivers={drivers} selectedMonth={selectedMonth} />
+                    <FactoryBreakdown userId={user.uid} drivers={drivers} selectedMonth={selectedMonth} />
                   </div>
                   <div className="bg-white border border-zinc-100 rounded-[32px] p-6 shadow-sm">
                     <h3 className="text-sm font-black text-zinc-800 mb-4 flex items-center gap-2">
                        <Users className="w-4 h-4 text-blue-500" /> أكثر السائقين عملاً
                     </h3>
-                    <TopDrivers drivers={drivers} selectedMonth={selectedMonth} />
+                    <TopDrivers userId={user.uid} drivers={drivers} selectedMonth={selectedMonth} />
                   </div>
                 </div>
 
@@ -1551,7 +1571,7 @@ export default function App() {
                     <h3 className="text-sm font-black text-zinc-800">بيان تفصيلي بجميع السائقين</h3>
                   </div>
                   <div className="overflow-x-auto">
-                    <DriverReportsTable drivers={drivers} selectedMonth={selectedMonth} factoryFilter={factoryFilter} />
+                    <DriverReportsTable userId={user.uid} drivers={drivers} selectedMonth={selectedMonth} factoryFilter={factoryFilter} />
                   </div>
                 </div>
               </div>
@@ -1871,25 +1891,30 @@ function SectionBox({
 }
 
 // Reports Components
-function useMonthlyData(selectedMonth: string) {
+function useMonthlyData(selectedMonth: string, userId?: string) {
   const [records, setRecords] = useState<JobRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!userId) return;
     setLoading(true);
-    const q = query(collection(db, 'jobRecords'), where('month', '==', selectedMonth));
+    const q = query(
+      collection(db, 'jobRecords'), 
+      where('userId', '==', userId),
+      where('month', '==', selectedMonth)
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setRecords(snapshot.docs.map(doc => doc.data() as JobRecord));
       setLoading(false);
     });
     return unsubscribe;
-  }, [selectedMonth]);
+  }, [selectedMonth, userId]);
 
   return { records, loading };
 }
 
-function ReportsStats({ drivers, selectedMonth, factoryFilter }: { drivers: Driver[], selectedMonth: string, factoryFilter: string }) {
-  const { records } = useMonthlyData(selectedMonth);
+function ReportsStats({ drivers, selectedMonth, factoryFilter, userId }: { drivers: Driver[], selectedMonth: string, factoryFilter: string, userId?: string }) {
+  const { records } = useMonthlyData(selectedMonth, userId);
 
   const stats = useMemo(() => {
     let filteredRecords = records;
@@ -1922,8 +1947,8 @@ function ReportsStats({ drivers, selectedMonth, factoryFilter }: { drivers: Driv
   );
 }
 
-function FactoryBreakdown({ drivers, selectedMonth }: { drivers: Driver[], selectedMonth: string }) {
-  const { records } = useMonthlyData(selectedMonth);
+function FactoryBreakdown({ drivers, selectedMonth, userId }: { drivers: Driver[], selectedMonth: string, userId?: string }) {
+  const { records } = useMonthlyData(selectedMonth, userId);
 
   const factoryData = useMemo(() => {
     const factories: Record<string, number> = {};
@@ -1953,8 +1978,8 @@ function FactoryBreakdown({ drivers, selectedMonth }: { drivers: Driver[], selec
   );
 }
 
-function TopDrivers({ drivers, selectedMonth }: { drivers: Driver[], selectedMonth: string }) {
-  const { records } = useMonthlyData(selectedMonth);
+function TopDrivers({ drivers, selectedMonth, userId }: { drivers: Driver[], selectedMonth: string, userId?: string }) {
+  const { records } = useMonthlyData(selectedMonth, userId);
 
   const topDrivers = useMemo(() => {
     return records
@@ -1987,8 +2012,8 @@ function TopDrivers({ drivers, selectedMonth }: { drivers: Driver[], selectedMon
   );
 }
 
-function DriverReportsTable({ drivers, selectedMonth, factoryFilter }: { drivers: Driver[], selectedMonth: string, factoryFilter: string }) {
-  const { records } = useMonthlyData(selectedMonth);
+function DriverReportsTable({ drivers, selectedMonth, factoryFilter, userId }: { drivers: Driver[], selectedMonth: string, factoryFilter: string, userId?: string }) {
+  const { records } = useMonthlyData(selectedMonth, userId);
 
   const tableData = useMemo(() => {
     return drivers

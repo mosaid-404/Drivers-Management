@@ -29,7 +29,8 @@ service cloud.firestore {
 
     // 1. & 2. Drivers Validation
     function isValidDriver(data) {
-      return data.keys().hasAll(['code', 'name', 'route', 'factory', 'mobile', 'status'])
+      return data.keys().hasAll(['userId', 'code', 'name', 'route', 'factory', 'mobile', 'status'])
+        && data.userId == request.auth.uid
         && data.code is string && data.code.size() <= 64
         && data.name is string && data.name.size() <= 128
         && data.route is string && data.route.size() <= 128
@@ -42,22 +43,26 @@ service cloud.firestore {
     }
 
     match /drivers/{driverId} {
-      allow read: if isSignedIn();
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
       allow create: if isSignedIn() && isValidId(driverId) 
         && isValidDriver(incoming())
         && incoming().createdAt == request.time;
-      allow update: if isSignedIn() && isValidId(driverId) && (
-        // Allow all known fields in update
-        (incoming().diff(existing()).affectedKeys().hasOnly(['code', 'name', 'route', 'factory', 'carType', 'mobile', 'status', 'notes', 'updatedAt', 'createdAt']))
-        && (incoming().get('createdAt', request.time) == existing().get('createdAt', request.time))
-        && isValidDriver(incoming())
-      );
-      allow delete: if isSignedIn();
+      allow update: if isSignedIn() && isValidId(driverId) 
+        && existing().userId == request.auth.uid
+        && (
+          // Allow all known fields in update
+          (incoming().diff(existing()).affectedKeys().hasOnly(['userId', 'code', 'name', 'route', 'factory', 'carType', 'mobile', 'status', 'notes', 'updatedAt', 'createdAt']))
+          && (incoming().get('userId', request.auth.uid) == existing().userId)
+          && (incoming().get('createdAt', request.time) == existing().get('createdAt', request.time))
+          && isValidDriver(incoming())
+        );
+      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
     }
 
     // Job Records Validation
     function isValidJobRecord(data) {
-      return data.keys().hasAll(['driverId', 'month', 'items', 'deductions', 'totalWork', 'totalDeductions', 'netPay', 'updatedAt'])
+      return data.keys().hasAll(['userId', 'driverId', 'month', 'items', 'deductions', 'totalWork', 'totalDeductions', 'netPay', 'updatedAt'])
+        && data.userId == request.auth.uid
         && data.driverId is string && data.driverId.size() <= 128
         && data.month is string && data.month.matches('^[0-9]{4}-[0-9]{2}$')
         && data.items is list && data.items.size() <= 100
@@ -69,8 +74,11 @@ service cloud.firestore {
     }
 
     match /jobRecords/{recordId} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn() && isValidId(recordId) && isValidJobRecord(incoming());
+      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow write: if isSignedIn() && isValidId(recordId) && isValidJobRecord(incoming()) && (
+        !exists(/databases/$(database)/documents/jobRecords/$(recordId)) || 
+        get(/databases/$(database)/documents/jobRecords/$(recordId)).data.userId == request.auth.uid
+      );
     }
   }
 }

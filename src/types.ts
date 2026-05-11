@@ -7,6 +7,7 @@ export interface NoteItem {
 
 export interface Driver {
   id: string;
+  userId: string;
   code: string;
   name: string;
   route: string;
@@ -33,6 +34,7 @@ export interface Deduction {
 
 export interface JobRecord {
   id: string;
+  userId: string;
   driverId: string;
   month: string; // YYYY-MM
   items: JobItem[];
