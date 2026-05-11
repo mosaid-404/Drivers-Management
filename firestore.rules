@@ -43,20 +43,28 @@ service cloud.firestore {
     }
 
     match /drivers/{driverId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && (
+        resource == null || 
+        !('userId' in resource.data) || 
+        resource.data.userId == request.auth.uid
+      );
       allow create: if isSignedIn() && isValidId(driverId) 
         && isValidDriver(incoming())
         && incoming().createdAt == request.time;
       allow update: if isSignedIn() && isValidId(driverId) 
-        && existing().userId == request.auth.uid
+        && (!('userId' in existing()) || existing().userId == request.auth.uid)
         && (
           // Allow all known fields in update
           (incoming().diff(existing()).affectedKeys().hasOnly(['userId', 'code', 'name', 'route', 'factory', 'carType', 'mobile', 'status', 'notes', 'updatedAt', 'createdAt']))
-          && (incoming().get('userId', request.auth.uid) == existing().userId)
+          && (incoming().get('userId', request.auth.uid) == request.auth.uid)
           && (incoming().get('createdAt', request.time) == existing().get('createdAt', request.time))
           && isValidDriver(incoming())
         );
-      allow delete: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow delete: if isSignedIn() && (
+        resource == null || 
+        !('userId' in resource.data) || 
+        resource.data.userId == request.auth.uid
+      );
     }
 
     // Job Records Validation
@@ -74,9 +82,14 @@ service cloud.firestore {
     }
 
     match /jobRecords/{recordId} {
-      allow read: if isSignedIn() && resource.data.userId == request.auth.uid;
+      allow read: if isSignedIn() && (
+        resource == null || 
+        !('userId' in resource.data) || 
+        resource.data.userId == request.auth.uid
+      );
       allow write: if isSignedIn() && isValidId(recordId) && isValidJobRecord(incoming()) && (
         !exists(/databases/$(database)/documents/jobRecords/$(recordId)) || 
+        !('userId' in get(/databases/$(database)/documents/jobRecords/$(recordId)).data) ||
         get(/databases/$(database)/documents/jobRecords/$(recordId)).data.userId == request.auth.uid
       );
     }
