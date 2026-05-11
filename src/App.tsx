@@ -70,7 +70,27 @@ export default function App() {
   const [editingDriverId, setEditingDriverId] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [currentJobRecord, setCurrentJobRecord] = useState<JobRecord | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonth());
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const savedDefaultMonth = localStorage.getItem('defaultMonthSetting');
+    if (savedDefaultMonth && savedDefaultMonth !== 'current') {
+      return savedDefaultMonth;
+    }
+    return getCurrentMonth();
+  });
+  
+  const [defaultMonthMode, setDefaultMonthMode] = useState<'current' | 'custom'>(() => {
+    const savedDefaultMonth = localStorage.getItem('defaultMonthSetting');
+    return (savedDefaultMonth && savedDefaultMonth !== 'current') ? 'custom' : 'current';
+  });
+
+  const handleUpdateDefaultMonth = (mode: 'current' | 'custom', month?: string) => {
+    setDefaultMonthMode(mode);
+    if (mode === 'current') {
+      localStorage.setItem('defaultMonthSetting', 'current');
+    } else if (month) {
+      localStorage.setItem('defaultMonthSetting', month);
+    }
+  };
   
   const handleExportMonthlyReport = async () => {
     try {
@@ -449,31 +469,86 @@ export default function App() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    if (!file.name.endsWith('.json')) {
+      alert('الرجاء اختيار ملف نسخة احتياطية بصيغة JSON. ملفات الإكسل لا يمكن استيرادها من هنا.');
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
-        const data = JSON.parse(event.target?.result as string);
-        if (!data.drivers || !data.jobRecords) throw new Error('Invalid format');
-
-        if (!confirm('سيتم إضافة هذه البيانات إلى قاعدة البيانات الحالية. هل أنت متأكد؟')) return;
-
-        const batch = writeBatch(db);
-        
-        // Import drivers using setDoc to preserve IDs if possible or just add them
-        for (const driver of data.drivers) {
-          const { id, ...driverData } = driver;
-          batch.set(doc(db, 'drivers', id), { ...driverData, createdAt: serverTimestamp() });
+        const text = event.target?.result as string;
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (jsonErr) {
+          throw new Error('الملف ليس بتنسيق JSON صحيح. تأكد من جودة الملف.');
         }
 
-        for (const record of data.jobRecords) {
-          const { id, ...recordData } = record;
-          batch.set(doc(db, 'jobRecords', id), { ...recordData, updatedAt: serverTimestamp() });
+        if (!data || (!data.drivers && !data.jobRecords)) {
+          throw new Error('تنسيق الملف غير مدعوم. البيانات المطلوبة مفقودة.');
         }
 
-        await batch.commit();
-        alert('تم الاستيراد بنجاح');
-      } catch (err) {
-        alert('خطأ في تنسيق الملف');
+        const driversToImport = data.drivers || [];
+        const recordsToImport = data.jobRecords || [];
+
+        if (!confirm(`هل أنت متأكد من استيراد ${driversToImport.length} سائق و ${recordsToImport.length} سجل شغل؟ قد يتم الكتابة فوق البيانات الحالية.`)) return;
+
+        // Fetch existing drivers to preserve createdAt and satisfy security rules
+        const currentDriversSnap = await getDocs(collection(db, 'drivers'));
+        const existingDriversMap = new Map(currentDriversSnap.docs.map(d => [d.id, d.data().createdAt]));
+
+        const CHUNK_SIZE = 400;
+        const allOps: { ref: any, data: any }[] = [];
+
+        // Prepare Driver Operations
+        for (const driver of driversToImport) {
+          const { id, createdAt: jsonCreatedAt, updatedAt: jsonUpdatedAt, ...driverData } = driver;
+          const existingCreatedAt = existingDriversMap.get(id);
+          
+          allOps.push({
+            ref: doc(db, 'drivers', id),
+            data: {
+              ...driverData,
+              createdAt: existingCreatedAt || serverTimestamp(), // Use existing if update, serverTimestamp if new
+            }
+          });
+        }
+
+        // Prepare Job Record Operations
+        for (const record of recordsToImport) {
+          const { id, updatedAt: jsonUpdatedAt, ...recordData } = record;
+          allOps.push({
+            ref: doc(db, 'jobRecords', id),
+            data: {
+              ...recordData,
+              updatedAt: serverTimestamp() // jobRecords rule requires this for any write
+            }
+          });
+        }
+
+        // Execute in chunks
+        let successfulBatches = 0;
+        for (let i = 0; i < allOps.length; i += CHUNK_SIZE) {
+          const chunk = allOps.slice(i, i + CHUNK_SIZE);
+          const batch = writeBatch(db);
+          chunk.forEach(op => batch.set(op.ref, op.data));
+          try {
+            await batch.commit();
+            successfulBatches++;
+          } catch (batchErr: any) {
+            console.error(`Batch ${successfulBatches + 1} failed:`, batchErr);
+            throw new Error(`تعذر استيراد بعض البيانات: ${batchErr.message}`);
+          }
+        }
+
+        alert('تم استيراد البيانات بنجاح!');
+        e.target.value = ''; // Reset input
+        setShowImportModal(false);
+        setShowSettings(false);
+      } catch (err: any) {
+        console.error('Import error:', err);
+        alert(err.message || 'حدث خطأ أثناء استيراد البيانات. تأكد من أن الملف سليم وصلاحياتك كافية.');
       }
     };
     reader.readAsText(file);
@@ -1537,8 +1612,53 @@ export default function App() {
                     <label className="flex flex-col items-center gap-2 p-4 bg-white border border-zinc-200 rounded-2xl hover:border-emerald-200 hover:text-emerald-600 transition-all text-sm font-bold cursor-pointer">
                       <input type="file" className="hidden" accept=".json" onChange={handleImportData} />
                       <HardDriveUpload className="w-6 h-6 opacity-40" />
-                      استيراد البيانات
+                      استرداد البيانات
                     </label>
+                  </div>
+                </div>
+
+                <div className="bg-zinc-50 p-4 rounded-3xl border border-zinc-100">
+                  <h3 className="text-xs font-black text-zinc-400 mb-4 uppercase tracking-wider">تفضيلات العرض</h3>
+                  <div className="space-y-4">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-xs font-bold text-zinc-600">الشهر الافتراضي عند الفتح</label>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => handleUpdateDefaultMonth('current')}
+                          className={cn(
+                            "flex-1 py-2 px-3 rounded-xl text-[10px] font-bold border transition-all",
+                            defaultMonthMode === 'current' 
+                              ? "bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-100" 
+                              : "bg-white text-zinc-500 border-zinc-100 hover:bg-zinc-50"
+                          )}
+                        >
+                          الشهر الحالي تلقائياً
+                        </button>
+                        <button 
+                          onClick={() => handleUpdateDefaultMonth('custom', selectedMonth)}
+                          className={cn(
+                            "flex-1 py-2 px-3 rounded-xl text-[10px] font-bold border transition-all",
+                            defaultMonthMode === 'custom' 
+                              ? "bg-emerald-600 text-white border-emerald-600 shadow-lg shadow-emerald-100" 
+                              : "bg-white text-zinc-500 border-zinc-100 hover:bg-zinc-50"
+                          )}
+                        >
+                          تحديد شهر ثابت
+                        </button>
+                      </div>
+                    </div>
+                    {defaultMonthMode === 'custom' && (
+                      <div className="flex flex-col gap-2 animate-in fade-in slide-in-from-top-2">
+                        <label className="text-[10px] font-bold text-zinc-400">اختر الشهر الذي تريده افتراضياً:</label>
+                        <input 
+                          type="month" 
+                          className="bg-white border-zinc-100 rounded-xl text-xs font-bold py-2 px-3"
+                          value={localStorage.getItem('defaultMonthSetting') || selectedMonth}
+                          onChange={(e) => handleUpdateDefaultMonth('custom', e.target.value)}
+                        />
+                        <p className="text-[9px] text-emerald-600 font-bold">سيفتح التطبيق دائماً على {localStorage.getItem('defaultMonthSetting')} حتى يتم تغييره.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
