@@ -31,6 +31,7 @@
         "totalWork": { "type": "number" },
         "totalDeductions": { "type": "number" },
         "netPay": { "type": "number" },
+        "isPaid": { "type": "boolean", "description": "هل تم القبض (دفع المبلغ)؟" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["driverId", "month"]

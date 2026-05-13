@@ -14,6 +14,8 @@ import {
   UserPlus,
   Trash2,
   Save,
+  Pencil,
+  CheckCircle2,
   Share2,
   X,
   CreditCard,
@@ -844,7 +846,19 @@ export default function App() {
                       className="bg-white/10 border border-white/20 p-2 rounded-full hover:bg-white/30 transition-colors"
                       title="تعديل البيانات"
                     >
-                      <Save className="w-3.5 h-3.5" />
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
+                    <button 
+                      onClick={() => saveJobRecord({ isPaid: !currentJobRecord?.isPaid })}
+                      className={cn(
+                        "p-2 rounded-full transition-all border",
+                        currentJobRecord?.isPaid 
+                          ? "bg-white border-white text-emerald-600 shadow-lg" 
+                          : "bg-white/10 border-white/20 text-white hover:bg-white/30"
+                      )}
+                      title={currentJobRecord?.isPaid ? "تم القبض" : "تسجيل كـ تم القبض"}
+                    >
+                      <CheckCircle2 className={cn("w-3.5 h-3.5", currentJobRecord?.isPaid && "fill-emerald-600")} />
                     </button>
                     <button 
                       onClick={handleShareReport}
@@ -946,7 +960,15 @@ export default function App() {
                     <>
                       {/* Month Picker */}
                       <div className="flex items-center justify-between pb-2">
-                        <h3 className="text-sm font-bold text-zinc-800">بيان شهر</h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className="text-sm font-bold text-zinc-800">بيان شهر</h3>
+                          {currentJobRecord?.isPaid && (
+                            <span className="flex items-center gap-1 bg-emerald-100 text-emerald-700 text-[9px] px-2 py-0.5 rounded-full font-black animate-in fade-in zoom-in">
+                              <CheckCircle2 className="w-2.5 h-2.5 fill-emerald-700" />
+                              تم القبض
+                            </span>
+                          )}
+                        </div>
                         <input 
                           type="month" 
                           value={selectedMonth}

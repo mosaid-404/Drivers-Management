@@ -78,6 +78,7 @@ service cloud.firestore {
         && data.totalWork is number
         && data.totalDeductions is number
         && data.netPay is number
+        && (data.get('isPaid', false) is bool)
         && data.updatedAt == request.time;
     }
 
