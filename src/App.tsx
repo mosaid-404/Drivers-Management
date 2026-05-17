@@ -818,7 +818,9 @@ export default function App() {
                   onClick={() => setShowDriverSelector(true)}
                   className="flex flex-col items-center flex-1 min-w-0 hover:bg-zinc-50 rounded-xl py-1 transition-colors group"
                 >
-                  <p className="text-[10px] text-zinc-400 font-bold mb-0.5">كود: {currentDriver.code} • {currentDriver.factory}{currentDriver.carType ? ` • ${currentDriver.carType}` : ''}</p>
+                  <p className="text-[10px] text-zinc-400 font-bold mb-0.5 truncate max-w-full px-4 text-center">
+                    كود: {currentDriver.code} • {currentDriver.factory} • {currentDriver.route} • {currentDriver.carType || '---'}
+                  </p>
                   <h2 className="font-black text-zinc-800 text-sm truncate w-full px-2 text-center group-hover:text-emerald-600 transition-colors">{currentDriver.name}</h2>
                   <div className="flex items-center gap-1">
                     <span className="text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-lg">{currentIndex + 1} / {currentDriverList.length}</span>
