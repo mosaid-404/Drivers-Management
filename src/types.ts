@@ -43,5 +43,6 @@ export interface JobRecord {
   totalDeductions: number;
   netPay: number;
   isPaid?: boolean;
+  notes?: NoteItem[];
   updatedAt: any;
 }

@@ -73,6 +73,7 @@ export default function App() {
   const [editingDriverId, setEditingDriverId] = useState<string | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
   const [currentJobRecord, setCurrentJobRecord] = useState<JobRecord | null>(null);
+  const [monthlyRecords, setMonthlyRecords] = useState<JobRecord[]>([]);
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const savedDefaultMonth = localStorage.getItem('defaultMonthSetting');
     if (savedDefaultMonth && savedDefaultMonth !== 'current') {
@@ -206,6 +207,22 @@ export default function App() {
     }, (err) => handleFirestoreError(err, OperationType.GET, 'drivers'));
     return unsubscribe;
   }, [user]);
+
+  useEffect(() => {
+    if (!user) {
+      setMonthlyRecords([]);
+      return;
+    }
+    const q = query(
+      collection(db, 'jobRecords'),
+      where('userId', '==', user.uid),
+      where('month', '==', selectedMonth)
+    );
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setMonthlyRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as JobRecord));
+    }, (err) => handleFirestoreError(err, OperationType.GET, 'jobRecords'));
+    return unsubscribe;
+  }, [user, selectedMonth]);
 
   const handleLogin = async () => {
     try {
@@ -979,11 +996,18 @@ export default function App() {
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
                            <span className="font-bold">{driver.name}</span>
-                           {driver.notes && (
-                             <span title="يوجد ملاحظات" className="flex items-center justify-center w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
-                           )}
+                           {(() => {
+                             const driverRec = monthlyRecords.find(r => r.driverId === driver.id);
+                             const hasNotes = driverRec?.notes && driverRec.notes.length > 0;
+                             if (hasNotes) {
+                               return (
+                                 <span title="يوجد ملاحظات" className="flex items-center justify-center w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+                               );
+                             }
+                             return null;
+                           })()}
                         </div>
-                        <span className="text-xs opacity-70">كود: {driver.code}</span>
+                        <span className="text-[10px] font-medium opacity-85">كود: {driver.code} • {driver.factory} • {driver.route}</span>
                       </div>
                       <div className="flex items-center gap-2">
                         <ChevronLeft className={cn("w-4 h-4 transition-transform", currentDriver?.id === driver.id ? "translate-x-1" : "opacity-0")} />
@@ -1076,7 +1100,7 @@ export default function App() {
                   >
                     <div className="flex items-center gap-2">
                       <p className="text-emerald-100 text-[10px] font-bold bg-emerald-700/50 px-2 py-0.5 rounded">كود: {currentDriver.code}</p>
-                      {currentDriver.notes && <StickyNote className="w-3 h-3 text-orange-300" />}
+                      {currentJobRecord?.notes && currentJobRecord.notes.length > 0 && <StickyNote className="w-3 h-3 text-orange-300" />}
                     </div>
                     <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2 group">
                       {currentDriver.name}
@@ -1146,9 +1170,9 @@ export default function App() {
                        {tab.label}
                        {tab.id === 'notes' && (
                          <>
-                           {Array.isArray(currentDriver.notes) && currentDriver.notes.some(n => n.isImportant) ? (
+                           {Array.isArray(currentJobRecord?.notes) && currentJobRecord.notes.some(n => n.isImportant) ? (
                              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse ml-1" />
-                           ) : Array.isArray(currentDriver.notes) && currentDriver.notes.length > 0 ? (
+                           ) : Array.isArray(currentJobRecord?.notes) && currentJobRecord.notes.length > 0 ? (
                              <span className="w-1.5 h-1.5 rounded-full bg-orange-400 ml-1" />
                            ) : null}
                          </>
@@ -1371,8 +1395,8 @@ export default function App() {
                               isImportant: false,
                               createdAt: Date.now()
                             };
-                            const notesArray = Array.isArray(currentDriver.notes) ? currentDriver.notes : [];
-                            const updatedNotes = [newNote, ...notesArray];
+                            const notesArray = Array.isArray(currentJobRecord?.notes) ? currentJobRecord.notes : [];
+                            const updatedNotes = [newNote, ...notesArray]; saveJobRecord({ notes: updatedNotes }); return;
                             updateDoc(doc(db, 'drivers', currentDriver.id), { 
                               userId: user.uid,
                               notes: updatedNotes,
@@ -1387,14 +1411,14 @@ export default function App() {
                       </div>
 
                       <div className="space-y-3">
-                        {(!Array.isArray(currentDriver.notes) || currentDriver.notes.length === 0) ? (
+                        {(!Array.isArray(currentJobRecord?.notes) || currentJobRecord.notes.length === 0) ? (
                           <div className="bg-zinc-50 border-2 border-dashed border-zinc-100 rounded-3xl p-10 flex flex-col items-center justify-center text-zinc-300 gap-2">
                             <StickyNote className="w-8 h-8 opacity-20" />
                             <span className="text-[10px] font-bold">لا يوجد ملاحظات مسجلة</span>
                           </div>
                         ) : (
                           <AnimatePresence initial={false}>
-                            {currentDriver.notes.map((note, idx) => (
+{(currentJobRecord?.notes || []).map((note, idx) => (
                               <motion.div 
                                 key={`note-${note.id || idx}-${idx}`}
                                 initial={{ opacity: 0, x: -10 }}
@@ -1408,9 +1432,11 @@ export default function App() {
                                 <div className="flex gap-3">
                                   <button 
                                     onClick={() => {
-                                      const updatedNotes = currentDriver.notes?.map(n => 
+                                      const updatedNotes = currentJobRecord?.notes?.map(n => 
                                         n.id === note.id ? { ...n, isImportant: !n.isImportant } : n
-                                      );
+                                      ) || [];
+                                      saveJobRecord({ notes: updatedNotes });
+                                      return;
                                       updateDoc(doc(db, 'drivers', currentDriver.id), { 
                                         userId: user.uid,
                                         notes: updatedNotes,
@@ -1433,14 +1459,10 @@ export default function App() {
                                       rows={2}
                                       value={note.text}
                                       onChange={(e) => {
-                                        const updatedNotes = currentDriver.notes?.map(n => 
+                                        const updatedNotes = (currentJobRecord?.notes || []).map(n => 
                                           n.id === note.id ? { ...n, text: e.target.value } : n
                                         );
-                                        updateDoc(doc(db, 'drivers', currentDriver.id), { 
-                                          userId: user.uid,
-                                          notes: updatedNotes,
-                                          updatedAt: serverTimestamp()
-                                        });
+                                        saveJobRecord({ notes: updatedNotes });
                                       }}
                                     />
                                     <div className="flex items-center justify-between mt-2 pt-2 border-t border-zinc-50">
@@ -1449,7 +1471,7 @@ export default function App() {
                                       </span>
                                       <button 
                                         onClick={() => {
-                                          const updatedNotes = currentDriver.notes?.filter(n => n.id !== note.id);
+                                          const updatedNotes = (currentJobRecord?.notes || []).filter(n => n.id !== note.id); saveJobRecord({ notes: updatedNotes }); return;
                                           updateDoc(doc(db, 'drivers', currentDriver.id), { 
                                             userId: user.uid,
                                             notes: updatedNotes,
@@ -2066,9 +2088,16 @@ export default function App() {
                       >
                         <div className="flex-1">
                           <p className="font-black text-sm">{driver.name}</p>
-                          <p className={cn("text-[10px] font-bold", currentDriver?.id === driver.id ? "text-emerald-100" : "text-zinc-400")}>كود: {driver.code} • {driver.factory}</p>
+                          <p className={cn("text-[10px] font-bold", currentDriver?.id === driver.id ? "text-emerald-100" : "text-zinc-400")}>كود: {driver.code} • {driver.factory} • {driver.route}</p>
                         </div>
-                        {driver.notes && <StickyNote className={cn("w-4 h-4", currentDriver?.id === driver.id ? "text-emerald-200" : "text-orange-400")} />}
+                        {(() => {
+                          const driverRec = monthlyRecords.find(r => r.driverId === driver.id);
+                          const hasNotes = driverRec?.notes && driverRec.notes.length > 0;
+                          if (hasNotes) {
+                            return <StickyNote className={cn("w-4 h-4", currentDriver?.id === driver.id ? "text-emerald-200" : "text-orange-400")} />;
+                          }
+                          return null;
+                        })()}
                       </button>
                     );
                   })
