@@ -25,7 +25,8 @@ import {
   HardDriveDownload,
   HardDriveUpload,
   BarChart3,
-  AlertCircle
+  AlertCircle,
+  HelpCircle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -239,6 +240,49 @@ export default function App() {
     message: string
   } | null>(null);
 
+  // For Custom Dialogs (Modal alerts/confirms instead of window.alert/confirm)
+  const [customDialog, setCustomDialog] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    type: 'alert' | 'confirm' | 'success';
+    onConfirm?: () => void | Promise<void>;
+    confirmText?: string;
+    cancelText?: string;
+  } | null>(null);
+
+  const triggerAlert = (title: string, message: string) => {
+    setCustomDialog({
+      isOpen: true,
+      title,
+      message,
+      type: 'alert',
+      confirmText: 'حسناً'
+    });
+  };
+
+  const triggerSuccess = (title: string, message: string) => {
+    setCustomDialog({
+      isOpen: true,
+      title,
+      message,
+      type: 'success',
+      confirmText: 'موافق'
+    });
+  };
+
+  const triggerConfirm = (title: string, message: string, onConfirm: () => void | Promise<void>) => {
+    setCustomDialog({
+      isOpen: true,
+      title,
+      message,
+      type: 'confirm',
+      onConfirm,
+      confirmText: 'تأكيد',
+      cancelText: 'إلغاء'
+    });
+  };
+
   const reportRef = React.useRef<HTMLDivElement>(null);
 
   // Derived Drivers
@@ -328,7 +372,7 @@ export default function App() {
 
     // Validation for mobile: exactly 11 digits if provided
     if (mobile && !/^\d{11}$/.test(mobile)) {
-      alert('رقم الموبايل يجب أن يتكون من 11 رقم بالضبط');
+      triggerAlert('تنبيه التحقق', 'رقم الموبايل يجب أن يتكون من 11 رقم بالضبط');
       return;
     }
 
@@ -376,6 +420,125 @@ export default function App() {
       }
     }
     setShowImportModal(false);
+  };
+
+  const getPreviousMonthStr = (monthStr: string): string => {
+    const [yearStr, monthStrPart] = monthStr.split('-');
+    const year = parseInt(yearStr);
+    const month = parseInt(monthStrPart);
+    let prevMonth = month - 1;
+    let prevYear = year;
+    if (prevMonth === 0) {
+      prevMonth = 12;
+      prevYear = year - 1;
+    }
+    return `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+  };
+
+  const [isImportingLastMonth, setIsImportingLastMonth] = useState(false);
+  const [isArchivingDrivers, setIsArchivingDrivers] = useState(false);
+
+  const handleArchiveAllDrivers = async () => {
+    if (!user) return;
+    const activeCount = drivers.filter(d => d.status === 'active').length;
+    if (activeCount === 0) {
+      triggerAlert("أرشفة السائقين", "لا يوجد سائقين نشطين حالياً لتعطيلهم/أرشفتهم.");
+      return;
+    }
+    
+    triggerConfirm(
+      "تأكيد أرشفة شهر جديد",
+      `هل أنت متأكد من تعطيل/أرشفة جميع السائقين النشطين (${activeCount} سائق) للبدء من جديد؟\n\nلن يتم حذف بيانات السائقين أو سجلاتهم التاريخية، بل سيتم نقلهم جميعاً لتبويب "المتوقفين" بحيث تكون القائمة النشطة فارغة لتضيف من جديد.`,
+      async () => {
+        setIsArchivingDrivers(true);
+        try {
+          const batch = writeBatch(db);
+          const activeList = drivers.filter(d => d.status === 'active');
+          activeList.forEach(driver => {
+            batch.update(doc(db, 'drivers', driver.id), {
+              status: 'retired',
+              updatedAt: serverTimestamp()
+            });
+          });
+          await batch.commit();
+          triggerSuccess("تم الأرشفة بنجاح", "تمت أرشفة وتعطيل جميع السائقين بنجاح. القائمة النشطة فارغة الآن لتتمكن من الإضافة من الصفر.");
+        } catch (err) {
+          console.error(err);
+          triggerAlert("حدث خطأ", "حدث خطأ أثناء أرشفة السائقين في قاعدة البيانات.");
+        } finally {
+          setIsArchivingDrivers(false);
+        }
+      }
+    );
+  };
+
+  const handleImportLastMonthDrivers = async () => {
+    if (!user) return;
+    const prevMonth = getPreviousMonthStr(selectedMonth);
+    
+    setIsImportingLastMonth(true);
+    try {
+      // 1. Fetch jobRecords of previous month to see which drivers actually had records
+      const q = query(
+        collection(db, 'jobRecords'),
+        where('userId', '==', user.uid),
+        where('month', '==', prevMonth)
+      );
+      const snap = await getDocs(q);
+      const prevMonthDriverIds = Array.from(new Set(snap.docs.map(doc => doc.data().driverId)));
+
+      if (prevMonthDriverIds.length === 0) {
+        triggerAlert("استيراد شهر سابق", `لم يتم العثور على أي سجلات عمل أو سائقين لديهم بيانات في الشهر السابق (${prevMonth}).`);
+        setIsImportingLastMonth(false);
+        return;
+      }
+
+      // Find which of these drivers are currently in our drivers collection
+      const matchingDrivers = drivers.filter(d => prevMonthDriverIds.includes(d.id));
+
+      if (matchingDrivers.length === 0) {
+        triggerAlert("استيراد شهر سابق", "لم نعثر على السائقين الذين عملوا الشهر الماضي في قاعدة البيانات (ربما تم حذفهم).");
+        setIsImportingLastMonth(false);
+        return;
+      }
+
+      const retiredMatching = matchingDrivers.filter(d => d.status === 'retired');
+
+      if (retiredMatching.length === 0) {
+        triggerAlert("استيراد شهر سابق", `جميع السائقين الذين عملوا في الشهر السابق (${matchingDrivers.length} سائق) هم بالفعل نشطون حالياً في قائمة هذا الشهر.`);
+        setIsImportingLastMonth(false);
+        return;
+      }
+
+      triggerConfirm(
+        "تأكيد استيراد سائقي الشهر الماضي",
+        `تم العثور على ${matchingDrivers.length} سائق عملوا في الشهر الماضي (${prevMonth}).\nمنهم ${retiredMatching.length} سائق "متوقفين" حالياً.\n\nهل تريد تنشيط وإدخال هؤلاء الـ ${retiredMatching.length} سائق إلى قائمتك النشطة لهذا الشهر؟`,
+        async () => {
+          setIsImportingLastMonth(true);
+          try {
+            const batch = writeBatch(db);
+            retiredMatching.forEach(driver => {
+              batch.update(doc(db, 'drivers', driver.id), {
+                status: 'active',
+                updatedAt: serverTimestamp()
+              });
+            });
+
+            await batch.commit();
+            triggerSuccess("استيراد موفق", `تم بنجاح تنشيط واستيراد ${retiredMatching.length} سائق من الشهر الماضي (${prevMonth})!`);
+          } catch (err) {
+            console.error(err);
+            triggerAlert("حدث خطأ", "حدث خطأ أثناء تنشيط واستيراد سائقي الشهر الماضي.");
+          } finally {
+            setIsImportingLastMonth(false);
+          }
+        }
+      );
+    } catch (err) {
+      console.error(err);
+      triggerAlert("حدث خطأ", "حدث خطأ غير متوقع أثناء فحص السجلات السابقة.");
+      setIsImportingLastMonth(false);
+    }
   };
 
   const saveJobRecord = async (updatedData: Partial<JobRecord>) => {
@@ -453,7 +616,7 @@ export default function App() {
       link.click();
     } catch (err) {
       console.error('oops, something went wrong!', err);
-      alert('حدث خطأ أثناء إنشاء التقرير');
+      triggerAlert('خطأ التقرير', 'حدث خطأ أثناء إنشاء التقرير وصورة المشاركة.');
     }
   };
 
@@ -476,7 +639,7 @@ export default function App() {
       link.download = `driver_manager_backup_${new Date().toISOString().split('T')[0]}.json`;
       link.click();
     } catch (err) {
-      alert('حدث خطأ أثناء التصدير');
+      triggerAlert('خطأ التصدير', 'حدث خطأ أثناء تصدير بيانات النسخة الاحتياطية.');
     }
   };
 
@@ -485,7 +648,7 @@ export default function App() {
     if (!file) return;
 
     if (!file.name.endsWith('.json')) {
-      alert('الرجاء اختيار ملف نسخة احتياطية بصيغة JSON. ملفات الإكسل لا يمكن استيرادها من هنا.');
+      triggerAlert('خطأ الاستيراد', 'الرجاء اختيار ملف نسخة احتياطية بصيغة JSON. ملفات الإكسل لا يمكن استيرادها من هنا.');
       return;
     }
 
@@ -493,7 +656,7 @@ export default function App() {
     reader.onload = async (event) => {
       try {
         const text = event.target?.result as string;
-        let data;
+        let data: any;
         try {
           data = JSON.parse(text);
         } catch (jsonErr) {
@@ -507,65 +670,74 @@ export default function App() {
         const driversToImport = data.drivers || [];
         const recordsToImport = data.jobRecords || [];
 
-        if (!confirm(`هل أنت متأكد من استيراد ${driversToImport.length} سائق و ${recordsToImport.length} سجل شغل؟ قد يتم الكتابة فوق البيانات الحالية.`)) return;
+        triggerConfirm(
+          "تأكيد استرداد البيانات",
+          `هل أنت متأكد من استيراد ${driversToImport.length} سائق و ${recordsToImport.length} سجل شغل؟ قد يتم الكتابة فوق البيانات الحالية والعمليات السابقة.`,
+          async () => {
+            try {
+              // Fetch existing drivers to preserve createdAt and satisfy security rules
+              const currentDriversSnap = await getDocs(collection(db, 'drivers'));
+              const existingDriversMap = new Map(currentDriversSnap.docs.map(d => [d.id, d.data().createdAt]));
 
-        // Fetch existing drivers to preserve createdAt and satisfy security rules
-        const currentDriversSnap = await getDocs(collection(db, 'drivers'));
-        const existingDriversMap = new Map(currentDriversSnap.docs.map(d => [d.id, d.data().createdAt]));
+              const CHUNK_SIZE = 400;
+              const allOps: { ref: any, data: any }[] = [];
+              
+              // Prepare Driver Operations
+              for (const driver of driversToImport) {
+                const { id, createdAt: jsonCreatedAt, updatedAt: jsonUpdatedAt, ...driverData } = driver;
+                const existingCreatedAt = existingDriversMap.get(id);
+                
+                allOps.push({
+                  ref: doc(db, 'drivers', id),
+                  data: {
+                    ...driverData,
+                    userId: user.uid, // Force current user ID
+                    createdAt: existingCreatedAt || serverTimestamp(), // Use existing if update, serverTimestamp if new
+                  }
+                });
+              }
 
-        const CHUNK_SIZE = 400;
-        const allOps: { ref: any, data: any }[] = [];
-        
-        // Prepare Driver Operations
-        for (const driver of driversToImport) {
-          const { id, createdAt: jsonCreatedAt, updatedAt: jsonUpdatedAt, ...driverData } = driver;
-          const existingCreatedAt = existingDriversMap.get(id);
-          
-          allOps.push({
-            ref: doc(db, 'drivers', id),
-            data: {
-              ...driverData,
-              userId: user.uid, // Force current user ID
-              createdAt: existingCreatedAt || serverTimestamp(), // Use existing if update, serverTimestamp if new
+              // Prepare Job Record Operations
+              for (const record of recordsToImport) {
+                const { id, updatedAt: jsonUpdatedAt, ...recordData } = record;
+                allOps.push({
+                  ref: doc(db, 'jobRecords', id),
+                  data: {
+                    ...recordData,
+                    userId: user.uid, // Force current user ID
+                    updatedAt: serverTimestamp() // jobRecords rule requires this for any write
+                  }
+                });
+              }
+
+              // Execute in chunks
+              let successfulBatches = 0;
+              for (let i = 0; i < allOps.length; i += CHUNK_SIZE) {
+                const chunk = allOps.slice(i, i + CHUNK_SIZE);
+                const batch = writeBatch(db);
+                chunk.forEach(op => batch.set(op.ref, op.data));
+                try {
+                  await batch.commit();
+                  successfulBatches++;
+                } catch (batchErr: any) {
+                  console.error(`Batch ${successfulBatches + 1} failed:`, batchErr);
+                  throw new Error(`تعذر استيراد بعض البيانات: ${batchErr.message}`);
+                }
+              }
+
+              triggerSuccess('استرداد ناجح', 'تم استيراد كافة السائقين وسجلات التشغيل بنجاح!');
+              e.target.value = ''; // Reset input
+              setShowImportModal(false);
+              setShowSettings(false);
+            } catch (err: any) {
+              console.error('Import error:', err);
+              triggerAlert('فشل الاسترداد', err.message || 'حدث خطأ أثناء استيراد البيانات.');
             }
-          });
-        }
-
-        // Prepare Job Record Operations
-        for (const record of recordsToImport) {
-          const { id, updatedAt: jsonUpdatedAt, ...recordData } = record;
-          allOps.push({
-            ref: doc(db, 'jobRecords', id),
-            data: {
-              ...recordData,
-              userId: user.uid, // Force current user ID
-              updatedAt: serverTimestamp() // jobRecords rule requires this for any write
-            }
-          });
-        }
-
-        // Execute in chunks
-        let successfulBatches = 0;
-        for (let i = 0; i < allOps.length; i += CHUNK_SIZE) {
-          const chunk = allOps.slice(i, i + CHUNK_SIZE);
-          const batch = writeBatch(db);
-          chunk.forEach(op => batch.set(op.ref, op.data));
-          try {
-            await batch.commit();
-            successfulBatches++;
-          } catch (batchErr: any) {
-            console.error(`Batch ${successfulBatches + 1} failed:`, batchErr);
-            throw new Error(`تعذر استيراد بعض البيانات: ${batchErr.message}`);
           }
-        }
-
-        alert('تم استيراد البيانات بنجاح!');
-        e.target.value = ''; // Reset input
-        setShowImportModal(false);
-        setShowSettings(false);
+        );
       } catch (err: any) {
         console.error('Import error:', err);
-        alert(err.message || 'حدث خطأ أثناء استيراد البيانات. تأكد من أن الملف سليم وصلاحياتك كافية.');
+        triggerAlert('فشل قراءة الملف', err.message || 'حدث خطأ أثناء قراءة ملف النسخة الاحتياطية.');
       }
     };
     reader.readAsText(file);
@@ -688,8 +860,8 @@ export default function App() {
             onChange={(e) => setFactoryFilter(e.target.value)}
           >
             <option value="">كل المصانع</option>
-            {Array.from(new Set(drivers.map(d => d.factory))).filter(Boolean).sort().map(f => (
-              <option key={f} value={f}>{f}</option>
+            {Array.from(new Set(drivers.map(d => d.factory?.trim()))).filter(Boolean).sort().map((f, idx) => (
+              <option key={`opt-1-${f}-${idx}`} value={f}>{f}</option>
             ))}
           </select>
           <select 
@@ -744,8 +916,8 @@ export default function App() {
                   onChange={(e) => setFactoryFilter(e.target.value)}
                 >
                   <option value="">كل المصانع</option>
-                  {Array.from(new Set(drivers.map(d => d.factory))).filter(Boolean).map(f => (
-                    <option key={f} value={f}>{f}</option>
+                  {Array.from(new Set(drivers.map(d => d.factory?.trim()))).filter(Boolean).map((f, idx) => (
+                    <option key={`opt-2-${f}-${idx}`} value={f}>{f}</option>
                   ))}
                 </select>
               </div>
@@ -765,33 +937,61 @@ export default function App() {
             </div>
 
             <div className="overflow-y-auto flex-1 pr-2 space-y-2 no-scrollbar">
-              {currentDriverList.map((driver, listIdx) => {
-                return (
-                  <button
-                    key={driver.id}
-                    onClick={() => setSelectedDriverId(driver.id)}
-                    className={cn(
-                      "w-full text-right p-4 rounded-xl transition-all border flex items-center justify-between group",
-                      currentDriver?.id === driver.id 
-                        ? (sidebarTab === 'active' ? "bg-emerald-50 border-emerald-200 text-emerald-800 shadow-sm" : "bg-orange-50 border-orange-200 text-orange-800 shadow-sm")
-                        : "bg-white border-zinc-100 hover:border-zinc-300 text-zinc-600"
-                    )}
-                  >
-                    <div className="flex flex-col gap-1">
-                      <div className="flex items-center gap-2">
-                         <span className="font-bold">{driver.name}</span>
-                         {driver.notes && (
-                           <span title="يوجد ملاحظات" className="flex items-center justify-center w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
-                         )}
+              {currentDriverList.length === 0 ? (
+                sidebarTab === 'active' ? (
+                  <div className="py-8 px-4 text-center bg-zinc-50 rounded-2xl border border-zinc-100 flex flex-col items-center">
+                    <Users className="w-8 h-8 text-zinc-300 mb-2" />
+                    <p className="text-xs font-black text-zinc-500 mb-1">قائمة النشطين فارغة حالياً</p>
+                    <p className="text-[10px] text-zinc-400 mb-4 leading-relaxed text-center">يمكنك البدء من الصفر أو استيراد السائقين الذين عملوا في الشهر السابق.</p>
+                    
+                    <div className="w-full space-y-2">
+                      <button 
+                        onClick={handleImportLastMonthDrivers}
+                        disabled={isImportingLastMonth}
+                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-xl text-[10px] font-bold shadow-lg shadow-emerald-100 transition-all flex items-center justify-center gap-1.5"
+                      >
+                        {isImportingLastMonth ? "جاري الاستيراد..." : `🔄 استيراد سائقي شهر ${getPreviousMonthStr(selectedMonth)}`}
+                      </button>
+                      <button 
+                        onClick={() => setShowAddForm(true)}
+                        className="w-full py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <Plus className="w-3.5 h-3.5" /> إضافة سائق جديد
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="py-10 text-center text-zinc-400 italic text-sm">لا يوجد نتائج</div>
+                )
+              ) : (
+                currentDriverList.map((driver, listIdx) => {
+                  return (
+                    <button
+                      key={driver.id || listIdx}
+                      onClick={() => setSelectedDriverId(driver.id)}
+                      className={cn(
+                        "w-full text-right p-4 rounded-xl transition-all border flex items-center justify-between group",
+                        currentDriver?.id === driver.id 
+                          ? (sidebarTab === 'active' ? "bg-emerald-50 border-emerald-200 text-emerald-800 shadow-sm" : "bg-orange-50 border-orange-200 text-orange-800 shadow-sm")
+                          : "bg-white border-zinc-100 hover:border-zinc-300 text-zinc-600"
+                      )}
+                    >
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                           <span className="font-bold">{driver.name}</span>
+                           {driver.notes && (
+                             <span title="يوجد ملاحظات" className="flex items-center justify-center w-2 h-2 rounded-full bg-orange-400 animate-pulse" />
+                           )}
+                        </div>
+                        <span className="text-xs opacity-70">كود: {driver.code}</span>
                       </div>
-                      <span className="text-xs opacity-70">كود: {driver.code}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <ChevronLeft className={cn("w-4 h-4 transition-transform", currentDriver?.id === driver.id ? "translate-x-1" : "opacity-0")} />
-                    </div>
-                  </button>
-                );
-              })}
+                      <div className="flex items-center gap-2">
+                        <ChevronLeft className={cn("w-4 h-4 transition-transform", currentDriver?.id === driver.id ? "translate-x-1" : "opacity-0")} />
+                      </div>
+                    </button>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -1164,7 +1364,9 @@ export default function App() {
                         <button 
                           onClick={() => {
                             const newNote = {
-                              id: crypto.randomUUID(),
+                              id: (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+                                ? crypto.randomUUID()
+                                : Math.random().toString(36).substring(2, 15) + Date.now().toString(36),
                               text: '',
                               isImportant: false,
                               createdAt: Date.now()
@@ -1192,9 +1394,9 @@ export default function App() {
                           </div>
                         ) : (
                           <AnimatePresence initial={false}>
-                            {currentDriver.notes.map((note) => (
+                            {currentDriver.notes.map((note, idx) => (
                               <motion.div 
-                                key={note.id}
+                                key={`note-${note.id || idx}-${idx}`}
                                 initial={{ opacity: 0, x: -10 }}
                                 animate={{ opacity: 1, x: 0 }}
                                 exit={{ opacity: 0, x: 10 }}
@@ -1470,8 +1672,8 @@ export default function App() {
                         className="w-full bg-zinc-50 border-zinc-200 rounded-xl py-2 text-sm font-bold focus:ring-emerald-500" 
                       />
                       <datalist id="factory-suggestions">
-                        {Array.from(new Set(drivers.map(d => d.factory))).filter(Boolean).sort().map(f => (
-                          <option key={f} value={f} />
+                        {Array.from(new Set(drivers.map(d => d.factory?.trim()))).filter(Boolean).sort().map((f, idx) => (
+                          <option key={`opt-3-${f}-${idx}`} value={f} />
                         ))}
                       </datalist>
                     </div>
@@ -1562,8 +1764,8 @@ export default function App() {
                     onChange={(e) => setFactoryFilter(e.target.value)}
                   >
                     <option value="">كل المصانع</option>
-                    {Array.from(new Set(drivers.map(d => d.factory))).filter(Boolean).map(f => (
-                      <option key={f} value={f}>{f}</option>
+                    {Array.from(new Set(drivers.map(d => d.factory?.trim()))).filter(Boolean).map((f, idx) => (
+                      <option key={`opt-4-${f}-${idx}`} value={f}>{f}</option>
                     ))}
                   </select>
                 </div>
@@ -1643,6 +1845,42 @@ export default function App() {
               </div>
 
               <div className="space-y-4">
+                {/* Month Management Helper */}
+                <div className="bg-zinc-50 p-4 rounded-3xl border border-zinc-100 space-y-4">
+                  <h3 className="text-xs font-black text-zinc-400 uppercase tracking-wider">مساعد إدارة الأشهر</h3>
+                  <div className="bg-white p-3.5 rounded-2xl border border-zinc-200">
+                    <p className="text-[10px] text-zinc-400 font-bold mb-1">الشهر المختار حالياً</p>
+                    <p className="text-sm font-black text-zinc-800 flex items-center gap-2">
+                       <CheckCircle2 className="w-4 h-4 text-emerald-600 fill-emerald-100" />
+                       {selectedMonth}
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <button 
+                      onClick={handleImportLastMonthDrivers}
+                      disabled={isImportingLastMonth}
+                      className="flex flex-col items-center justify-center text-center gap-2 p-4 bg-white border border-zinc-200 rounded-2xl hover:border-emerald-200 hover:text-emerald-600 disabled:opacity-50 disabled:pointer-events-none transition-all text-xs font-bold"
+                      title={`استيراد السائقين من شهر ${getPreviousMonthStr(selectedMonth)}`}
+                    >
+                      <History className="w-6 h-6 text-emerald-600" />
+                      <span>سائقي الشهر الماضي</span>
+                      <span className="text-[9px] text-zinc-400 font-normal">({getPreviousMonthStr(selectedMonth)})</span>
+                    </button>
+                    
+                    <button 
+                      onClick={handleArchiveAllDrivers}
+                      disabled={isArchivingDrivers}
+                      className="flex flex-col items-center justify-center text-center gap-2 p-4 bg-white border border-zinc-200 rounded-2xl hover:border-red-200 hover:text-red-600 disabled:opacity-50 disabled:pointer-events-none transition-all text-xs font-bold"
+                      title="تعطيل جميع السائقين النشطين للبدء من الصفر"
+                    >
+                      <Trash2 className="w-6 h-6 text-red-500" />
+                      <span>بدء شهر جديد فارغ</span>
+                      <span className="text-[9px] text-zinc-400 font-normal">(أرشفة السائقين)</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div className="bg-zinc-50 p-4 rounded-3xl border border-zinc-100">
                   <h3 className="text-xs font-black text-zinc-400 mb-4 uppercase tracking-wider">النسخ الاحتياطي</h3>
                   <div className="grid grid-cols-2 gap-3">
@@ -1764,8 +2002,8 @@ export default function App() {
                     onChange={(e) => setFactoryFilter(e.target.value)}
                   >
                     <option value="">كل المصانع</option>
-                    {Array.from(new Set(drivers.map(d => d.factory))).filter(Boolean).map(f => (
-                      <option key={f} value={f}>{f}</option>
+                    {Array.from(new Set(drivers.map(d => d.factory?.trim()))).filter(Boolean).map((f, idx) => (
+                      <option key={`opt-5-${f}-${idx}`} value={f}>{f}</option>
                     ))}
                   </select>
                 </div>
@@ -1784,13 +2022,36 @@ export default function App() {
 
               <div className="overflow-y-auto flex-1 space-y-2 pr-1 no-scrollbar text-right">
                 {currentDriverList.length === 0 ? (
-                  <div className="py-10 text-center text-zinc-400 italic text-sm">لا يوجد نتائج</div>
+                  sidebarTab === 'active' ? (
+                    <div className="py-8 px-4 text-center bg-zinc-50 rounded-2xl border border-zinc-100 flex flex-col items-center">
+                      <Users className="w-8 h-8 text-zinc-300 mb-2" />
+                      <p className="text-xs font-black text-zinc-500 mb-1">قائمة النشطين فارغة حالياً</p>
+                      <p className="text-[10px] text-zinc-400 mb-4 leading-relaxed text-center">يمكنك البدء من الصفر أو استيراد السائقين الذين عملوا في الشهر السابق.</p>
+                      
+                      <div className="w-full space-y-2">
+                        <button 
+                          onClick={() => { handleImportLastMonthDrivers(); setShowDriverSelector(false); }}
+                          disabled={isImportingLastMonth}
+                          className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-400 text-white rounded-xl text-[10px] font-bold shadow-lg shadow-emerald-100 transition-all flex items-center justify-center gap-1.5"
+                        >
+                          {isImportingLastMonth ? "جاري الاستيراد..." : `🔄 استيراد سائقي شهر ${getPreviousMonthStr(selectedMonth)}`}
+                        </button>
+                        <button 
+                          onClick={() => { setShowAddForm(true); setShowDriverSelector(false); }}
+                          className="w-full py-2.5 bg-zinc-100 hover:bg-zinc-200 text-zinc-700 rounded-xl text-[10px] font-bold transition-all flex items-center justify-center gap-1.5"
+                        >
+                          <Plus className="w-3.5 h-3.5" /> إضافة سائق جديد
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-10 text-center text-zinc-400 italic text-sm">لا يوجد نتائج</div>
+                  )
                 ) : (
-                  currentDriverList.map((driver) => {
-                    const globalIndex = filteredDrivers.findIndex(d => d.id === driver.id);
+                  currentDriverList.map((driver, idx) => {
                     return (
                       <button
-                        key={driver.id}
+                        key={driver.id || idx}
                         onClick={() => {
                           setSelectedDriverId(driver.id);
                           setShowDriverSelector(false);
@@ -1852,6 +2113,71 @@ export default function App() {
                 >
                   تأكيد الحذف
                 </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {customDialog && customDialog.isOpen && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 rtl">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setCustomDialog(prev => prev ? { ...prev, isOpen: false } : null)}
+              className="fixed inset-0 bg-zinc-900/60 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-[40px] w-full max-w-sm p-8 relative z-10 shadow-2xl text-center flex flex-col font-sans"
+            >
+              <div className={cn(
+                "w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6",
+                customDialog.type === 'confirm' ? "bg-blue-50 text-blue-600" :
+                customDialog.type === 'success' ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-500"
+              )}>
+                {customDialog.type === 'confirm' && <HelpCircle className="w-8 h-8 font-black" />}
+                {customDialog.type === 'success' && <CheckCircle2 className="w-8 h-8 font-black" />}
+                {customDialog.type === 'alert' && <AlertCircle className="w-8 h-8 font-black" />}
+              </div>
+              
+              <h3 className="text-lg font-black text-zinc-800 mb-2 font-sans">{customDialog.title}</h3>
+              <p className="text-zinc-500 text-xs font-bold mb-8 leading-relaxed whitespace-pre-line font-sans">
+                {customDialog.message}
+              </p>
+              
+              <div className="grid grid-cols-2 gap-4 w-full mt-auto">
+                {customDialog.type === 'confirm' ? (
+                  <>
+                    <button 
+                      onClick={() => setCustomDialog(prev => prev ? { ...prev, isOpen: false } : null)}
+                      className="py-3.5 bg-zinc-100 text-zinc-600 rounded-2xl font-bold hover:bg-zinc-200 transition-all text-xs font-sans"
+                    >
+                      {customDialog.cancelText || 'تراجع'}
+                    </button>
+                    <button 
+                      onClick={async () => {
+                        const onConf = customDialog.onConfirm;
+                        setCustomDialog(prev => prev ? { ...prev, isOpen: false } : null);
+                        if (onConf) {
+                          await onConf();
+                        }
+                      }}
+                      className="py-3.5 bg-emerald-600 text-white rounded-2xl font-bold shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all text-xs font-sans"
+                    >
+                      {customDialog.confirmText || 'تأكيد'}
+                    </button>
+                  </>
+                ) : (
+                  <button 
+                    onClick={() => setCustomDialog(prev => prev ? { ...prev, isOpen: false } : null)}
+                    className="col-span-2 py-3.5 bg-zinc-900 text-white rounded-2xl font-bold hover:bg-black transition-all text-sm font-sans"
+                  >
+                    {customDialog.confirmText || 'موافق'}
+                  </button>
+                )}
               </div>
             </motion.div>
           </div>
@@ -1928,7 +2254,7 @@ function useMonthlyData(selectedMonth: string, userId?: string) {
       where('month', '==', selectedMonth)
     );
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setRecords(snapshot.docs.map(doc => doc.data() as JobRecord));
+      setRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }) as JobRecord));
       setLoading(false);
     });
     return unsubscribe;
@@ -1991,8 +2317,8 @@ function FactoryBreakdown({ drivers, selectedMonth, userId }: { drivers: Driver[
       {factoryData.length === 0 ? (
         <div className="text-center py-6 text-zinc-400 text-xs italic">لا توجد بيانات للمصانع هذا الشهر</div>
       ) : (
-        factoryData.map(([factory, total]) => (
-          <div key={factory} className="flex justify-between items-center p-3 bg-zinc-50 rounded-2xl">
+        factoryData.map(([factory, total], idx) => (
+          <div key={`factory-${factory}-${idx}`} className="flex justify-between items-center p-3 bg-zinc-50 rounded-2xl">
             <span className="text-xs font-black text-zinc-600">{factory}</span>
             <span className="text-xs font-black text-zinc-900">{total.toLocaleString()} ج.م</span>
           </div>
@@ -2078,8 +2404,8 @@ function DriverReportsTable({ drivers, selectedMonth, factoryFilter, userId }: {
         </tr>
       </thead>
       <tbody className="divide-y divide-zinc-100">
-        {tableData.map((row) => (
-          <tr key={row.id} className="hover:bg-zinc-50/50 transition-colors">
+        {tableData.map((row, idx) => (
+          <tr key={row.id || idx} className="hover:bg-zinc-50/50 transition-colors">
             <td className="px-6 py-4 text-xs font-black text-zinc-400">{row.code}</td>
             <td className="px-6 py-4 text-xs font-black text-zinc-800">
               {row.name}
