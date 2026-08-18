@@ -26,9 +26,12 @@ import {
   HardDriveUpload,
   BarChart3,
   AlertCircle,
-  HelpCircle
+  HelpCircle,
+  CalendarCheck,
+  Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { DailyManualJobLog } from './components/DailyManualJobLog';
 import { 
   collection, 
   onSnapshot, 
@@ -237,7 +240,7 @@ export default function App() {
   const [factoryFilter, setFactoryFilter] = useState('');
   const [sortBy, setSortBy] = useState<'code' | 'name' | 'newest' | 'oldest'>('code');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'details' | 'job' | 'notes'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'manual' | 'notes'>('details');
   const [sidebarTab, setSidebarTab] = useState<'active' | 'retired'>('active');
   const [showDriverSelector, setShowDriverSelector] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -1154,6 +1157,7 @@ export default function App() {
                 <div className="flex border-b border-zinc-100 bg-zinc-50/50">
                    {[
                      { id: 'details', label: 'الحسابات', icon: <CreditCard className="w-4 h-4" /> },
+                     { id: 'manual', label: 'تسجيل يدوي', icon: <CalendarCheck className="w-4 h-4" /> },
                      { id: 'notes', label: 'الملاحظات', icon: <StickyNote className="w-4 h-4" /> }
                    ].map(tab => (
                      <button
@@ -1162,12 +1166,15 @@ export default function App() {
                        className={cn(
                          "flex-1 flex items-center justify-center gap-2 py-3 text-xs font-bold transition-all border-b-2",
                          activeTab === tab.id 
-                           ? "border-emerald-600 text-emerald-600 bg-white" 
+                           ? "border-emerald-600 text-emerald-600 bg-white shadow-sm" 
                            : "border-transparent text-zinc-400 hover:text-zinc-600"
                        )}
                      >
                        {tab.icon}
                        {tab.label}
+                       {tab.id === 'manual' && Array.isArray(currentJobRecord?.dailyShifts) && currentJobRecord.dailyShifts.length > 0 && (
+                         <span className="w-2 h-2 rounded-full bg-sky-500 ml-1" />
+                       )}
                        {tab.id === 'notes' && (
                          <>
                            {Array.isArray(currentJobRecord?.notes) && currentJobRecord.notes.some(n => n.isImportant) ? (
@@ -1203,6 +1210,26 @@ export default function App() {
                         />
                       </div>
 
+                      {/* Manual Logging Prompt Banner */}
+                      <div className="bg-gradient-to-r from-sky-50 to-blue-50/50 border border-sky-100 rounded-2xl p-3 sm:p-4 flex items-center justify-between flex-wrap gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-sky-500 text-white p-2.5 rounded-xl shadow-md shadow-sky-200">
+                            <CalendarCheck className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <p className="text-xs font-black text-sky-950">تسجيل أيام العمل والورديات باليوم</p>
+                            <p className="text-[10px] text-sky-700 font-bold">يمكنك تحديد أيام الذهاب والعودة وتعديل اسم وسعر الوردية وتحديث الحساب تلقائياً</p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => setActiveTab('manual')}
+                          className="bg-sky-600 hover:bg-sky-700 active:scale-95 text-white px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm"
+                        >
+                          <Calendar className="w-3.5 h-3.5" />
+                          <span>فتح التسجيل اليومي</span>
+                        </button>
+                      </div>
+
                       {/* Summary Grid - SMALLER */}
                       <div className="grid grid-cols-3 gap-2">
                         <div className="bg-zinc-50 border border-zinc-100 p-2.5 rounded-2xl text-center">
@@ -1228,8 +1255,31 @@ export default function App() {
                           onAdd={() => saveJobRecord({ items: [...(currentJobRecord?.items || []), { description: '', rounds: 1, price: 0 }] })}
                           onUpdate={(idx, field, val) => {
                             const newItems = [...(currentJobRecord?.items || [])];
-                            newItems[idx] = { ...newItems[idx], [field]: val };
-                            saveJobRecord({ items: newItems });
+                            const oldItem = newItems[idx];
+                            newItems[idx] = { ...oldItem, [field]: val };
+
+                            // Synchronize with dailyShifts if this item corresponds to a daily shift
+                            let updatedDailyShifts = currentJobRecord?.dailyShifts;
+                            if (updatedDailyShifts && Array.isArray(updatedDailyShifts) && updatedDailyShifts.length > 0) {
+                              const targetShiftIndex = updatedDailyShifts.findIndex(
+                                s => s.name === oldItem.description || s.name === newItems[idx].description
+                              );
+
+                              if (targetShiftIndex !== -1) {
+                                const newShifts = [...updatedDailyShifts];
+                                newShifts[targetShiftIndex] = {
+                                  ...newShifts[targetShiftIndex],
+                                  name: field === 'description' ? (val as string) : newShifts[targetShiftIndex].name,
+                                  price: field === 'price' ? Number(val) || 0 : newShifts[targetShiftIndex].price
+                                };
+                                updatedDailyShifts = newShifts;
+                              }
+                            }
+
+                            saveJobRecord({ 
+                              items: newItems,
+                              ...(updatedDailyShifts ? { dailyShifts: updatedDailyShifts } : {})
+                            });
                           }}
                           onRemove={(idx) => {
                             setConfirmDelete({
@@ -1374,6 +1424,14 @@ export default function App() {
                         </div>
                       </div>
                     </>
+                  ) : activeTab === 'manual' ? (
+                    <DailyManualJobLog 
+                      selectedMonth={selectedMonth}
+                      driver={currentDriver}
+                      jobRecord={currentJobRecord}
+                      onSaveJobRecord={saveJobRecord}
+                      onSwitchToDetails={() => setActiveTab('details')}
+                    />
                   ) : (
                     <motion.div 
                       initial={{ opacity: 0, y: 10 }}

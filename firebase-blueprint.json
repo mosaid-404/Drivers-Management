@@ -12,7 +12,7 @@
         "factory": { "type": "string", "description": "المصنع" },
         "mobile": { "type": "string", "description": "رقم الموبايل" },
         "status": { "type": "string", "enum": ["active", "retired"], "description": "حالة السائق (نشط أو ترك العمل)" },
-        "notes": { "type": "string", "description": "ملاحظات إضافية عن السائق" },
+        "notes": { "type": "array", "description": "ملاحظات إضافية عن السائق" },
         "createdAt": { "type": "string", "format": "date-time" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
@@ -20,7 +20,7 @@
     },
     "JobRecord": {
       "title": "Job Record",
-      "description": "بيانات شغل السائق شهرياً",
+      "description": "بيانات شغل السائق شهرياً والتسجيل اليدوي باليوم",
       "type": "object",
       "properties": {
         "userId": { "type": "string", "description": "معرف المستخدم المالك للبيانات" },
@@ -32,6 +32,8 @@
         "totalDeductions": { "type": "number" },
         "netPay": { "type": "number" },
         "isPaid": { "type": "boolean", "description": "هل تم القبض (دفع المبلغ)؟" },
+        "notes": { "type": "array", "description": "ملاحظات وتنبيهات الشهر" },
+        "dailyShifts": { "type": "array", "description": "جدول الورديات والتسجيل اليومي اليدوي للذهاب والعودة" },
         "updatedAt": { "type": "string", "format": "date-time" }
       },
       "required": ["driverId", "month"]
@@ -44,7 +46,7 @@
     },
     "jobRecords": {
       "schema": "JobRecord",
-      "description": "سجلات الشغل الشهرية لكل سائق"
+      "description": "سجلات الشغل الشهرية والتسجيل اليومي لكل سائق"
     }
   }
 }

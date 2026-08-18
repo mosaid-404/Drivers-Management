@@ -32,6 +32,18 @@ export interface Deduction {
   date: string;
 }
 
+export interface DailyShift {
+  id: string;
+  name: string;
+  price: number;
+  days: {
+    [day: number]: {
+      go?: boolean;
+      return?: boolean;
+    };
+  };
+}
+
 export interface JobRecord {
   id: string;
   userId: string;
@@ -44,5 +56,6 @@ export interface JobRecord {
   netPay: number;
   isPaid?: boolean;
   notes?: NoteItem[];
+  dailyShifts?: DailyShift[];
   updatedAt: any;
 }

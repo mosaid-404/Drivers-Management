@@ -79,6 +79,8 @@ service cloud.firestore {
         && data.totalDeductions is number
         && data.netPay is number
         && (data.get('isPaid', false) is bool)
+        && (data.get('notes', []) is list && data.get('notes', []).size() <= 100)
+        && (data.get('dailyShifts', []) is list && data.get('dailyShifts', []).size() <= 20)
         && data.updatedAt == request.time;
     }
 
