@@ -887,16 +887,25 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Add Driver Button - Compact on Mobile (matching other buttons), Full on Desktop */}
           <button 
             onClick={() => setShowAddForm(true)}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all font-sans"
+            title="إضافة سائق جديد"
+            className="sm:hidden p-2 text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-200/60"
+          >
+            <Plus className="w-5 h-5" />
+          </button>
+          
+          <button 
+            onClick={() => setShowAddForm(true)}
+            className="hidden sm:flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all font-sans"
           >
             <Plus className="w-4 h-4" />
             <span>إضافة سائق</span>
           </button>
           
-          <div className="flex items-center gap-1 border-r border-zinc-100 pr-2 mr-2">
+          <div className="flex items-center gap-1 border-r border-zinc-100 pr-1.5 sm:pr-2 mr-1 sm:mr-2">
             <button 
               onClick={() => { setSidebarTab('active'); setShowDriverSelector(true); }}
               title="بحث سريع"
@@ -920,7 +929,8 @@ export default function App() {
             </button>
             <button 
               onClick={() => signOut(auth)}
-              className="p-2 text-zinc-400 hover:text-red-500"
+              title="تسجيل الخروج"
+              className="p-2 text-zinc-400 hover:text-red-500 transition-colors bg-zinc-50 rounded-lg hover:bg-red-50"
             >
               <LogOut className="w-5 h-5" />
             </button>
