@@ -28,7 +28,11 @@ import {
   AlertCircle,
   HelpCircle,
   CalendarCheck,
-  Calendar
+  Calendar,
+  Building2,
+  Route,
+  Truck,
+  Car
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DailyManualJobLog } from './components/DailyManualJobLog';
@@ -1111,15 +1115,49 @@ export default function App() {
                     </h1>
                   </button>
 
-                  <div className="grid grid-cols-2 gap-3 mt-4">
-                    <div className="bg-emerald-700/30 p-2.5 rounded-xl border border-emerald-500/20 flex items-center justify-between col-span-2 sm:col-span-1">
-                      <div className="truncate">
-                        <p className="text-[10px] text-emerald-100 mb-0.5 opacity-70">المصنع / الخط / السيارة</p>
-                        <p className="text-xs font-semibold truncate">
-                          {currentDriver.factory || '---'} - {currentDriver.route || '---'}
-                          {currentDriver.carType && ` - ${currentDriver.carType}`}
-                        </p>
+                  {/* Quick driver metadata badges (Factory, Route, Car, Mobile & Status) */}
+                  <div className="mt-3.5 space-y-2">
+                    {/* Compact metadata pills */}
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                      {/* Factory Pill */}
+                      <div className="flex items-center gap-1.5 bg-emerald-700/40 border border-emerald-500/30 px-2.5 py-1 rounded-xl backdrop-blur-sm">
+                        <Building2 className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+                        <span className="text-[10px] text-emerald-200/80 font-bold">المصنع:</span>
+                        <span className="font-black text-white">{currentDriver.factory || 'غير محدد'}</span>
                       </div>
+
+                      {/* Route Pill */}
+                      <div className="flex items-center gap-1.5 bg-emerald-700/40 border border-emerald-500/30 px-2.5 py-1 rounded-xl backdrop-blur-sm">
+                        <Route className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+                        <span className="text-[10px] text-emerald-200/80 font-bold">الخط:</span>
+                        <span className="font-black text-white">{currentDriver.route || 'غير محدد'}</span>
+                      </div>
+
+                      {/* Car Type Pill */}
+                      <div className="flex items-center gap-1.5 bg-emerald-700/40 border border-emerald-500/30 px-2.5 py-1 rounded-xl backdrop-blur-sm">
+                        <Truck className="w-3.5 h-3.5 text-emerald-200 shrink-0" />
+                        <span className="text-[10px] text-emerald-200/80 font-bold">السيارة:</span>
+                        <span className="font-black text-white">{currentDriver.carType || 'غير محددة'}</span>
+                      </div>
+                    </div>
+
+                    {/* Quick Action Bar: Call + Status Toggle */}
+                    <div className="flex items-center gap-2 pt-0.5">
+                      {currentDriver.mobile ? (
+                        <a 
+                          href={`tel:${currentDriver.mobile}`}
+                          className="flex-1 flex items-center justify-center gap-2 bg-white text-emerald-700 px-3 py-1.5 rounded-xl text-xs font-black shadow-md active:scale-95 transition-all hover:bg-emerald-50"
+                        >
+                          <Phone className="w-3.5 h-3.5 fill-emerald-700 text-emerald-700 shrink-0" />
+                          <span className="truncate">{currentDriver.mobile}</span>
+                          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-md font-bold shrink-0">اتصال</span>
+                        </a>
+                      ) : (
+                        <div className="flex-1 text-[11px] text-emerald-200/70 bg-emerald-700/20 px-3 py-1.5 rounded-xl text-center font-bold">
+                          لا يوجد رقم هاتف
+                        </div>
+                      )}
+
                       <button 
                         onClick={() => {
                           const status = currentDriver.status === 'active' ? 'retired' : 'active';
@@ -1130,26 +1168,17 @@ export default function App() {
                           });
                         }}
                         className={cn(
-                          "text-[9px] px-2 py-1 rounded-lg font-bold border transition-all active:scale-95",
+                          "px-3 py-1.5 rounded-xl text-[11px] font-black border transition-all active:scale-95 shrink-0 flex items-center gap-1",
                           currentDriver.status === 'active' 
-                            ? "bg-zinc-900 border-zinc-800 text-white hover:bg-black" 
-                            : "bg-orange-500 border-orange-400 text-white hover:bg-orange-600"
+                            ? "bg-zinc-900/90 border-zinc-700 text-white hover:bg-zinc-900 shadow-sm" 
+                            : "bg-amber-500 border-amber-400 text-white hover:bg-amber-600 shadow-sm"
                         )}
+                        title={currentDriver.status === 'active' ? "نقل للأرشيف (سائق غير نشط)" : "إعادة تفعيل السائق"}
                       >
-                        {currentDriver.status === 'active' ? 'أرشفة' : 'تنشيط'}
+                        <span className={cn("w-1.5 h-1.5 rounded-full", currentDriver.status === 'active' ? "bg-emerald-400" : "bg-amber-200")} />
+                        <span>{currentDriver.status === 'active' ? 'نشط (أرشفة)' : 'مؤرشف (تنشيط)'}</span>
                       </button>
                     </div>
-                    {currentDriver.mobile && (
-                      <div className="bg-emerald-700/30 p-2.5 rounded-xl border border-emerald-500/20 flex items-center justify-center">
-                        <a 
-                          href={`tel:${currentDriver.mobile}`}
-                          className="flex items-center gap-2 bg-white text-emerald-600 px-6 py-2 rounded-xl text-xs font-black shadow-lg active:scale-95 transition-all w-full justify-center"
-                        >
-                          <Phone className="w-4 h-4 fill-emerald-600" />
-                          <span>اتصــــال</span>
-                        </a>
-                      </div>
-                    )}
                   </div>
                 </div>
 
