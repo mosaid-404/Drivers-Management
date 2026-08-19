@@ -32,7 +32,11 @@ import {
   Building2,
   Route,
   Truck,
-  Car
+  Car,
+  Wifi,
+  WifiOff,
+  CloudCheck,
+  Check
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DailyManualJobLog } from './components/DailyManualJobLog';
@@ -249,6 +253,22 @@ export default function App() {
   const [showDriverSelector, setShowDriverSelector] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showReports, setShowReports] = useState(false);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
+
+  // Monitor network online/offline status
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
   
   const nextSuggestedCode = useMemo(() => {
     const numericalCodes = drivers
@@ -592,8 +612,11 @@ export default function App() {
     const { id: _, ...dataToSave } = newData;
 
     try {
+      setSaveStatus('saving');
       await setDoc(doc(db, 'jobRecords', recordId), dataToSave);
+      setSaveStatus('saved');
     } catch (err) {
+      setSaveStatus('idle');
       handleFirestoreError(err, OperationType.WRITE, `jobRecords/${recordId}`);
     }
   };
@@ -818,9 +841,50 @@ export default function App() {
   return (
     <div className="min-h-screen bg-zinc-50 rtl font-sans pb-20 lg:pb-0">
       {/* Header */}
-      <header className="bg-white border-b border-zinc-200 sticky top-0 z-30 px-4 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="font-bold text-lg hidden sm:block">مدير السائقين</span>
+      <header className="bg-white border-b border-zinc-200 sticky top-0 z-30 px-3 sm:px-4 py-2.5 flex items-center justify-between">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <span className="font-black text-base sm:text-lg text-zinc-800">مدير السائقين</span>
+
+          {/* Compact Network Status & Saved Indicators */}
+          <div className="flex items-center gap-1.5 bg-zinc-50 border border-zinc-200/80 px-2 py-1 rounded-xl shadow-xs">
+            {/* WiFi connection badge */}
+            <div 
+              className={cn(
+                "flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md transition-colors",
+                isOnline 
+                  ? "text-emerald-700 bg-emerald-100/70" 
+                  : "text-rose-700 bg-rose-100/70 animate-pulse"
+              )}
+              title={isOnline ? "متصل بالإنترنت" : "غير متصل بالإنترنت"}
+            >
+              {isOnline ? (
+                <Wifi className="w-3 h-3 text-emerald-600 shrink-0" />
+              ) : (
+                <WifiOff className="w-3 h-3 text-rose-600 shrink-0" />
+              )}
+              <span className="hidden xs:inline sm:inline">{isOnline ? "متصل" : "أوفلاين"}</span>
+            </div>
+
+            <div className="w-[1px] h-3 bg-zinc-200" />
+
+            {/* Save indicator badge */}
+            <div 
+              className={cn(
+                "flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md transition-all",
+                saveStatus === 'saving'
+                  ? "text-amber-700 bg-amber-100/70"
+                  : "text-sky-700 bg-sky-100/70"
+              )}
+              title={saveStatus === 'saving' ? "جاري الحفظ بالسحابة..." : "تم حفظ جميع التعديلات في السحابة"}
+            >
+              {saveStatus === 'saving' ? (
+                <span className="w-2.5 h-2.5 rounded-full border-2 border-amber-600 border-t-transparent animate-spin shrink-0" />
+              ) : (
+                <Check className="w-3 h-3 text-sky-600 stroke-[3] shrink-0" />
+              )}
+              <span className="hidden xs:inline sm:inline">{saveStatus === 'saving' ? "جاري الحفظ" : "تم الحفظ"}</span>
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
