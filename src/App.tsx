@@ -1313,26 +1313,6 @@ export default function App() {
                         />
                       </div>
 
-                      {/* Manual Logging Prompt Banner */}
-                      <div className="bg-gradient-to-r from-sky-50 to-blue-50/50 border border-sky-100 rounded-2xl p-3 sm:p-4 flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-center gap-3">
-                          <div className="bg-sky-500 text-white p-2.5 rounded-xl shadow-md shadow-sky-200">
-                            <CalendarCheck className="w-4 h-4" />
-                          </div>
-                          <div>
-                            <p className="text-xs font-black text-sky-950">تسجيل أيام العمل والورديات باليوم</p>
-                            <p className="text-[10px] text-sky-700 font-bold">يمكنك تحديد أيام الذهاب والعودة وتعديل اسم وسعر الوردية وتحديث الحساب تلقائياً</p>
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => setActiveTab('manual')}
-                          className="bg-sky-600 hover:bg-sky-700 active:scale-95 text-white px-3.5 py-1.5 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shadow-sm"
-                        >
-                          <Calendar className="w-3.5 h-3.5" />
-                          <span>فتح التسجيل اليومي</span>
-                        </button>
-                      </div>
-
                       {/* Summary Grid - SMALLER */}
                       <div className="grid grid-cols-3 gap-2">
                         <div className="bg-zinc-50 border border-zinc-100 p-2.5 rounded-2xl text-center">
