@@ -36,7 +36,8 @@ import {
   Wifi,
   WifiOff,
   CloudCheck,
-  Check
+  Check,
+  RotateCcw
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DailyManualJobLog } from './components/DailyManualJobLog';
@@ -645,6 +646,74 @@ export default function App() {
     }
   };
 
+  const [isRestoringItems, setIsRestoringItems] = useState(false);
+
+  const handleRestoreLastMonthItems = async () => {
+    if (!currentDriver || !user) return;
+    const prevMonth = getPreviousMonthStr(selectedMonth);
+    const prevRecordId = `${currentDriver.id}_${prevMonth}`;
+
+    setIsRestoringItems(true);
+    try {
+      const prevDocSnap = await getDoc(doc(db, 'jobRecords', prevRecordId));
+      if (!prevDocSnap.exists()) {
+        triggerAlert(
+          "استرجاع بنود الشهر السابق",
+          `لم يتم العثور على أي سجل شغل للسائق (${currentDriver.name}) في شهر (${formatMonthLabel(prevMonth)} - ${prevMonth}).`
+        );
+        setIsRestoringItems(false);
+        return;
+      }
+
+      const prevData = prevDocSnap.data() as JobRecord;
+      const prevItems = prevData?.items || [];
+      const validItems = prevItems.filter(it => it.description && it.description.trim() !== '');
+
+      if (validItems.length === 0) {
+        triggerAlert(
+          "استرجاع بنود الشهر السابق",
+          `لا توجد بنود شغل مسجلة في سجل شهر (${formatMonthLabel(prevMonth)} - ${prevMonth}) لهذا السائق.`
+        );
+        setIsRestoringItems(false);
+        return;
+      }
+
+      const newItemsToSet: JobItem[] = validItems.map(it => ({
+        description: it.description.trim(),
+        rounds: 0,
+        price: typeof it.price === 'number' ? it.price : (Number(it.price) || 0)
+      }));
+
+      const currentItems = currentJobRecord?.items || [];
+      const hasExistingItems = currentItems.length > 0;
+
+      const performRestore = async () => {
+        await saveJobRecord({ items: newItemsToSet });
+        triggerSuccess(
+          "تم استرجاع البنود",
+          `تم بنجاح استرجاع (${newItemsToSet.length}) بند من شهر ${formatMonthLabel(prevMonth)} مع تعيين عدد الورديات إلى 0 والاحتفاظ بالوصف وسعر الوردية.`
+        );
+      };
+
+      if (hasExistingItems) {
+        triggerConfirm(
+          "استرجاع بنود الشهر السابق",
+          `يوجد حالياً (${currentItems.length}) بند في هذا الشهر.\n\nهل تريد استبدالها ببنود الشهر السابق (${validItems.length} بند) مع ضبط عدد الورديات إلى 0؟`,
+          async () => {
+            await performRestore();
+          }
+        );
+      } else {
+        await performRestore();
+      }
+    } catch (err) {
+      console.error(err);
+      triggerAlert("حدث خطأ", "حدث خطأ أثناء محاولة استرجاع بنود الشهر السابق من قاعدة البيانات.");
+    } finally {
+      setIsRestoringItems(false);
+    }
+  };
+
   const handleShareReport = async () => {
     if (reportRef.current === null) return;
     
@@ -867,7 +936,6 @@ export default function App() {
       {/* Header */}
       <header className="bg-white border-b border-zinc-200 sticky top-0 z-30 px-3 sm:px-4 py-2.5 flex items-center justify-between">
         <div className="flex items-center gap-2 sm:gap-3">
-          <span className="font-black text-base sm:text-lg text-zinc-800">مدير السائقين</span>
 
           {/* Compact Network Status & Saved Indicators */}
           <div className="flex items-center gap-1.5 bg-zinc-50 border border-zinc-200/80 px-2 py-1 rounded-xl shadow-xs">
@@ -1416,7 +1484,20 @@ export default function App() {
                           title="بنود الشغل" 
                           icon={<ClipboardList className="w-5 h-5" />}
                           items={currentJobRecord?.items || []}
-                          onAdd={() => saveJobRecord({ items: [...(currentJobRecord?.items || []), { description: '', rounds: 1, price: 0 }] })}
+                          onAdd={() => saveJobRecord({ items: [...(currentJobRecord?.items || []), { description: '', rounds: 0, price: 0 }] })}
+                          headerAction={
+                            <button
+                              type="button"
+                              onClick={handleRestoreLastMonthItems}
+                              disabled={isRestoringItems}
+                              title="استرجاع بنود الشهر السابق (الوصف وسعر الوردية فقط مع ضبط الورديات 0)"
+                              className="flex items-center gap-1 text-[10px] sm:text-xs font-bold bg-white/80 hover:bg-white text-emerald-800 hover:text-emerald-950 px-2 sm:px-2.5 py-1 rounded-lg border border-emerald-300 shadow-2xs transition-all active:scale-95 disabled:opacity-50"
+                            >
+                              <RotateCcw className={cn("w-3.5 h-3.5 text-emerald-700", isRestoringItems && "animate-spin")} />
+                              <span className="hidden xs:inline sm:inline">استرجاع بنود الشهر السابق</span>
+                              <span className="xs:hidden sm:hidden">الشهر السابق</span>
+                            </button>
+                          }
                           onUpdate={(idx, field, val) => {
                             const newItems = [...(currentJobRecord?.items || [])];
                             const oldItem = newItems[idx];
@@ -2583,7 +2664,8 @@ function SectionBox({
   onUpdate, 
   onRemove, 
   renderItem,
-  accentColor = 'zinc'
+  accentColor = 'zinc',
+  headerAction
 }: { 
   title: string, 
   icon: React.ReactNode, 
@@ -2592,7 +2674,8 @@ function SectionBox({
   onUpdate: (idx: number, field: string, val: any) => void,
   onRemove: (idx: number) => void,
   renderItem: (item: any, idx: number, update: any, remove: any) => React.ReactNode,
-  accentColor?: 'zinc' | 'emerald' | 'orange'
+  accentColor?: 'zinc' | 'emerald' | 'orange',
+  headerAction?: React.ReactNode
 }) {
   const accentClasses = {
     zinc: "bg-zinc-50 text-zinc-600",
@@ -2602,14 +2685,22 @@ function SectionBox({
 
   return (
     <div className="bg-white border border-zinc-100 rounded-2xl overflow-hidden shadow-sm">
-      <div className={cn("px-4 py-3 flex items-center justify-between", accentClasses[accentColor])}>
+      <div className={cn("px-4 py-3 flex items-center justify-between gap-2", accentClasses[accentColor])}>
         <div className="flex items-center gap-2">
           {icon}
           <span className="text-sm font-bold">{title}</span>
         </div>
-        <button onClick={onAdd} className="bg-white/50 hover:bg-white p-1 rounded-lg transition-colors">
-          <Plus className="w-4 h-4" />
-        </button>
+        <div className="flex items-center gap-1.5">
+          {headerAction}
+          <button 
+            type="button"
+            onClick={onAdd} 
+            title="إضافة بند جديد"
+            className="bg-white/50 hover:bg-white p-1 rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+        </div>
       </div>
       <div className="p-4 space-y-3 min-h-[100px]">
         {items.length === 0 ? (
