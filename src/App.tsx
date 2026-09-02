@@ -75,6 +75,43 @@ const getCurrentMonth = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
+const getPreviousMonthStr = (monthStr: string): string => {
+  const [yearStr, monthStrPart] = monthStr.split('-');
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStrPart, 10);
+  let prevMonth = month - 1;
+  let prevYear = year;
+  if (prevMonth === 0) {
+    prevMonth = 12;
+    prevYear = year - 1;
+  }
+  return `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+};
+
+const getNextMonthStr = (monthStr: string): string => {
+  const [yearStr, monthStrPart] = monthStr.split('-');
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStrPart, 10);
+  let nextMonth = month + 1;
+  let nextYear = year;
+  if (nextMonth === 13) {
+    nextMonth = 1;
+    nextYear = year + 1;
+  }
+  return `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
+};
+
+const formatMonthLabel = (monthStr: string): string => {
+  try {
+    const [yearStr, monthStrPart] = monthStr.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStrPart, 10);
+    return new Intl.DateTimeFormat('ar-EG', { month: 'long', year: 'numeric' }).format(new Date(year, month - 1, 1));
+  } catch (e) {
+    return monthStr;
+  }
+};
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -464,19 +501,6 @@ export default function App() {
       }
     }
     setShowImportModal(false);
-  };
-
-  const getPreviousMonthStr = (monthStr: string): string => {
-    const [yearStr, monthStrPart] = monthStr.split('-');
-    const year = parseInt(yearStr);
-    const month = parseInt(monthStrPart);
-    let prevMonth = month - 1;
-    let prevYear = year;
-    if (prevMonth === 0) {
-      prevMonth = 12;
-      prevYear = year - 1;
-    }
-    return `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
   };
 
   const [isImportingLastMonth, setIsImportingLastMonth] = useState(false);
@@ -884,6 +908,29 @@ export default function App() {
               )}
               <span className="hidden xs:inline sm:inline">{saveStatus === 'saving' ? "جاري الحفظ" : "تم الحفظ"}</span>
             </div>
+          </div>
+          {/* Header Month Switcher & Quick Indicator */}
+          <div className="flex items-center gap-1 bg-emerald-50/80 border border-emerald-200/80 px-2 py-1 rounded-xl shadow-xs">
+            <button
+              onClick={() => setSelectedMonth(prev => getPreviousMonthStr(prev))}
+              title="الشهر السابق"
+              className="p-1 text-emerald-800 hover:text-emerald-950 hover:bg-emerald-100/80 active:scale-90 rounded-md transition-all flex items-center"
+            >
+              <ChevronRight className="w-3.5 h-3.5" />
+            </button>
+            <div className="flex items-center gap-1 px-1">
+              <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span className="text-xs font-black text-emerald-900 font-sans">
+                {formatMonthLabel(selectedMonth)}
+              </span>
+            </div>
+            <button
+              onClick={() => setSelectedMonth(prev => getNextMonthStr(prev))}
+              title="الشهر التالي"
+              className="p-1 text-emerald-800 hover:text-emerald-950 hover:bg-emerald-100/80 active:scale-90 rounded-md transition-all flex items-center"
+            >
+              <ChevronLeft className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
@@ -1294,23 +1341,57 @@ export default function App() {
                 <div className="p-4 sm:p-6 space-y-6">
                   {activeTab === 'details' ? (
                     <>
-                      {/* Month Picker */}
-                      <div className="flex items-center justify-between pb-2">
+                      {/* Month Picker Redesigned & Made Prominent */}
+                      <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-emerald-50/70 border border-emerald-200/90 rounded-2xl shadow-xs">
                         <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-bold text-zinc-800">بيان شهر</h3>
+                          <div className="p-1.5 bg-emerald-600 text-white rounded-xl shadow-xs">
+                            <Calendar className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-emerald-800 font-bold block">
+                              بيان الشهر الحالي
+                            </span>
+                            <h3 className="text-sm font-black text-emerald-950 font-sans">
+                              {formatMonthLabel(selectedMonth)}
+                            </h3>
+                          </div>
                           {currentJobRecord?.isPaid && (
-                            <span className="flex items-center gap-1 bg-emerald-100 text-emerald-700 text-[9px] px-2 py-0.5 rounded-full font-black animate-in fade-in zoom-in">
-                              <CheckCircle2 className="w-2.5 h-2.5 fill-emerald-700" />
+                            <span className="flex items-center gap-1 bg-emerald-200/80 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-black animate-in fade-in zoom-in mr-1">
+                              <CheckCircle2 className="w-3 h-3 fill-emerald-700 text-emerald-100" />
                               تم القبض
                             </span>
                           )}
                         </div>
-                        <input 
-                          type="month" 
-                          value={selectedMonth}
-                          onChange={(e) => setSelectedMonth(e.target.value)}
-                          className="bg-zinc-100 border-none rounded-xl text-xs px-3 py-1.5 font-bold shadow-inner"
-                        />
+
+                        {/* Navigation controls */}
+                        <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-emerald-200 shadow-xs">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedMonth(prev => getPreviousMonthStr(prev))}
+                            title="الشهر السابق"
+                            className="flex items-center gap-0.5 px-2 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-50 active:scale-95 rounded-lg transition-all"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                            <span className="hidden sm:inline">السابق</span>
+                          </button>
+                          
+                          <input 
+                            type="month" 
+                            value={selectedMonth}
+                            onChange={(e) => e.target.value && setSelectedMonth(e.target.value)}
+                            className="bg-zinc-50 hover:bg-zinc-100 text-zinc-800 border border-zinc-200 rounded-lg text-xs px-2.5 py-1 font-black cursor-pointer focus:ring-1 focus:ring-emerald-500"
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() => setSelectedMonth(prev => getNextMonthStr(prev))}
+                            title="الشهر التالي"
+                            className="flex items-center gap-0.5 px-2 py-1 text-xs font-bold text-emerald-800 hover:bg-emerald-50 active:scale-95 rounded-lg transition-all"
+                          >
+                            <span className="hidden sm:inline">التالي</span>
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
 
                       {/* Summary Grid - SMALLER */}
@@ -1514,6 +1595,7 @@ export default function App() {
                       jobRecord={currentJobRecord}
                       onSaveJobRecord={saveJobRecord}
                       onSwitchToDetails={() => setActiveTab('details')}
+                      onMonthChange={(newMonth) => setSelectedMonth(newMonth)}
                     />
                   ) : (
                     <motion.div 
@@ -1612,12 +1694,8 @@ export default function App() {
                                       </span>
                                       <button 
                                         onClick={() => {
-                                          const updatedNotes = (currentJobRecord?.notes || []).filter(n => n.id !== note.id); saveJobRecord({ notes: updatedNotes }); return;
-                                          updateDoc(doc(db, 'drivers', currentDriver.id), { 
-                                            userId: user.uid,
-                                            notes: updatedNotes,
-                                            updatedAt: serverTimestamp()
-                                          });
+                                          const updatedNotes = (currentJobRecord?.notes || []).filter(n => n.id !== note.id); 
+                                          saveJobRecord({ notes: updatedNotes });
                                         }}
                                         className="p-2 text-zinc-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
                                       >
@@ -1642,7 +1720,7 @@ export default function App() {
                               setConfirmDelete({
                                 type: 'driver',
                                 title: 'حذف السائق نهائياً',
-                                message: `هل أنت متأكد من مسح بيانات السائق (${currentDriver.name}) تماماً من النظام؟ هذا الإجراء سيقوم بحذف السائق وكل سجلاته ولن تتمكن من استعادته.`
+                                message: 'هل أنت متأكد من مسح بيانات هذا السائق تماماً من النظام؟'
                               });
                             }}
                             className="w-full bg-red-50 text-red-600 py-4 rounded-2xl text-xs font-bold hover:bg-red-100 transition-colors flex items-center justify-center gap-2 border border-red-100 shadow-sm"
@@ -1662,111 +1740,250 @@ export default function App() {
         </div>
       </main>
 
-      {/* Hidden Report for Image Generation */}
+      {/* Hidden Report for Image Generation (Full Report with Accounts & Daily Log) */}
       <div className="absolute top-[-9999px]">
-        <div ref={reportRef} className="w-[500px] bg-white p-8 rtl font-sans">
-           <div className="border-[6px] border-emerald-600 rounded-[40px] p-8 space-y-8 relative overflow-hidden">
+        <div ref={reportRef} className="w-[720px] bg-white p-6 rtl font-sans text-zinc-800">
+           <div className="border-4 border-emerald-600 rounded-[32px] p-6 space-y-6 relative overflow-hidden bg-white shadow-xl">
               {/* Decorative background element */}
-              <div className="absolute -top-20 -right-20 w-64 h-64 bg-emerald-50 rounded-full opacity-50" />
+              <div className="absolute -top-24 -right-24 w-80 h-80 bg-emerald-50 rounded-full opacity-60 pointer-events-none" />
               
-              <div className="relative flex justify-between items-start border-b-4 border-emerald-100 pb-6">
+              {/* Header */}
+              <div className="relative flex justify-between items-start border-b-2 border-emerald-100 pb-5">
                  <div>
-                    <p className="text-emerald-600 text-[10px] font-black uppercase tracking-wider mb-2">إيصال صرف مستحقات</p>
-                    <h1 className="text-3xl font-black text-zinc-800 leading-tight">{currentDriver?.name}</h1>
-                    <div className="flex gap-4 mt-2">
-                      <p className="text-zinc-500 font-bold text-xs">كود السائق: <span className="text-zinc-900">{currentDriver?.code}</span></p>
-                      <p className="text-zinc-500 font-bold text-xs">رقم الهاتف: <span className="text-zinc-900" dir="ltr">{currentDriver?.mobile || '---'}</span></p>
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span className="bg-emerald-100 text-emerald-800 text-[11px] font-black px-2.5 py-0.5 rounded-md">
+                        تقرير شامل • الحسابات وتسجيل الأيام
+                      </span>
+                    </div>
+                    <h1 className="text-2xl font-black text-zinc-900 leading-tight">{currentDriver?.name}</h1>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-xs font-bold text-zinc-500">
+                      <span>كود: <strong className="text-zinc-800">{currentDriver?.code}</strong></span>
+                      <span>الهاتف: <strong className="text-zinc-800" dir="ltr">{currentDriver?.mobile || '---'}</strong></span>
+                      <span>المصنع/الخط: <strong className="text-zinc-800">{currentDriver?.factory} / {currentDriver?.route}</strong></span>
+                      {currentDriver?.carType && <span>السيارة: <strong className="text-zinc-800">{currentDriver?.carType}</strong></span>}
                     </div>
                  </div>
-                 <div className="text-left">
-                    <div className="bg-emerald-600 text-white px-5 py-2 rounded-2xl text-lg font-black shadow-lg shadow-emerald-100">{selectedMonth}</div>
-                    <p className="text-[9px] text-zinc-400 mt-2 uppercase tracking-widest font-black">Settlement Receipt</p>
+                 <div className="text-left shrink-0">
+                    <div className="bg-emerald-600 text-white px-4 py-2 rounded-2xl text-base font-black shadow-md shadow-emerald-100 text-center">
+                      {selectedMonth}
+                    </div>
+                    <p className="text-[9px] text-zinc-400 mt-1 uppercase tracking-widest font-black text-center">Driver Report</p>
                  </div>
               </div>
 
-              <div className="relative grid grid-cols-2 gap-4">
-                 <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
-                    <p className="text-[9px] font-black text-zinc-400 mb-1 uppercase">المصنع / الخط</p>
-                    <p className="font-bold text-zinc-800 text-sm">{currentDriver?.factory} / {currentDriver?.route}</p>
-                 </div>
-                 <div className="bg-zinc-50 p-4 rounded-2xl border border-zinc-100">
-                    <p className="text-[9px] font-black text-zinc-400 mb-1 uppercase">نوع السيارة</p>
-                    <p className="font-bold text-zinc-800 text-sm">{currentDriver?.carType || "---"}</p>
-                 </div>
-              </div>
+              {/* 1. Daily Manual Work Log Grid (if exists) */}
+              {(() => {
+                const [yStr, mStr] = (selectedMonth || '').split('-');
+                const year = parseInt(yStr, 10) || new Date().getFullYear();
+                const month = parseInt(mStr, 10) || (new Date().getMonth() + 1);
+                const totalDays = new Date(year, month, 0).getDate();
+                const arabicDayInitials = ['أح', 'إث', 'ثل', 'أر', 'خم', 'جم', 'سب'];
+                
+                const shifts = currentJobRecord?.dailyShifts && currentJobRecord.dailyShifts.length > 0 
+                  ? currentJobRecord.dailyShifts 
+                  : [];
 
+                const daysList = [];
+                for (let d = 1; d <= totalDays; d++) {
+                  const dateObj = new Date(year, month - 1, d);
+                  const dayOfWeek = dateObj.getDay();
+                  daysList.push({
+                    day: d,
+                    initial: arabicDayInitials[dayOfWeek],
+                    isFriday: dayOfWeek === 5
+                  });
+                }
+
+                // Check if there is any logged day across shifts
+                let hasAnyLoggedDay = false;
+                shifts.forEach(s => {
+                  if (s.days && Object.values(s.days).some((dv: any) => dv?.go || dv?.return)) {
+                    hasAnyLoggedDay = true;
+                  }
+                });
+
+                if (shifts.length === 0 && !hasAnyLoggedDay) return null;
+
+                return (
+                  <div className="relative bg-zinc-50/80 border border-zinc-200 rounded-2xl p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="h-3.5 w-1 bg-sky-600 rounded-full" />
+                        <h3 className="text-xs font-black text-zinc-800 uppercase tracking-wider">
+                          سجل الحضور والورديات اليومي (تسجيل يدوي)
+                        </h3>
+                      </div>
+                      <span className="text-[10px] font-bold text-sky-700 bg-sky-100 px-2 py-0.5 rounded">
+                        {shifts.length} {shifts.length === 1 ? 'وردية' : 'ورديات'}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5">
+                      {shifts.map((shift, sIdx) => {
+                        let totalGo = 0;
+                        let totalReturn = 0;
+                        Object.values(shift.days || {}).forEach((dv: any) => {
+                          if (dv?.go) totalGo++;
+                          if (dv?.return) totalReturn++;
+                        });
+                        const shiftRounds = (totalGo * 0.5) + (totalReturn * 0.5);
+                        const shiftAmount = shiftRounds * shift.price;
+
+                        return (
+                          <div key={`rep-shift-${shift.id || sIdx}`} className="bg-white border border-zinc-200 rounded-xl p-2.5 shadow-xs">
+                            <div className="flex items-center justify-between text-xs mb-2 pb-1.5 border-b border-zinc-100">
+                              <span className="font-black text-zinc-800">{shift.name || `وردية ${sIdx + 1}`}</span>
+                              <div className="flex items-center gap-3 text-[10px] font-bold text-zinc-600">
+                                <span>سعر الوردية: <strong className="text-zinc-900">{shift.price} ج.م</strong></span>
+                                <span>ذهاب: <strong className="text-emerald-700 font-mono">{totalGo}</strong></span>
+                                <span>عودة: <strong className="text-sky-700 font-mono">{totalReturn}</strong></span>
+                                <span>إجمالي: <strong className="text-emerald-700 font-mono">{shiftRounds} و</strong> = <strong className="text-emerald-800">{shiftAmount.toLocaleString()} ج.م</strong></span>
+                              </div>
+                            </div>
+
+                            {/* Mini Calendar Row for this shift */}
+                            <div className="grid grid-cols-16 sm:grid-cols-31 gap-1 text-center" style={{ gridTemplateColumns: `repeat(${totalDays}, minmax(0, 1fr))` }}>
+                              {daysList.map(({ day, initial, isFriday }) => {
+                                const dayVal = (shift.days || {})[day] as { go?: boolean; return?: boolean } | undefined;
+                                const hasGo = !!dayVal?.go;
+                                const hasRet = !!dayVal?.return;
+                                const isWorked = hasGo || hasRet;
+
+                                return (
+                                  <div 
+                                    key={`day-${day}`}
+                                    className={cn(
+                                      "flex flex-col items-center justify-between rounded p-0.5 text-[8px] min-h-[40px] border transition-colors",
+                                      isFriday ? "bg-red-50/50 border-red-100 text-red-500 font-bold" : "bg-zinc-50 border-zinc-100 text-zinc-600",
+                                      isWorked && "bg-emerald-50/80 border-emerald-200"
+                                    )}
+                                  >
+                                    <span className="font-bold text-[7px] opacity-70 leading-none">{day}</span>
+                                    
+                                    {/* Indicators for Go and Return */}
+                                    <div className="flex flex-col gap-0.5 my-0.5 w-full items-center">
+                                      <span 
+                                        title="ذهاب" 
+                                        className={cn(
+                                          "w-2.5 h-1.5 rounded-[1px] text-[6px] font-black flex items-center justify-center leading-none",
+                                          hasGo ? "bg-emerald-600 text-white" : "bg-zinc-200/60 text-transparent"
+                                        )}
+                                      >
+                                        {hasGo ? '✓' : ''}
+                                      </span>
+                                      <span 
+                                        title="عودة" 
+                                        className={cn(
+                                          "w-2.5 h-1.5 rounded-[1px] text-[6px] font-black flex items-center justify-center leading-none",
+                                          hasRet ? "bg-sky-600 text-white" : "bg-zinc-200/60 text-transparent"
+                                        )}
+                                      >
+                                        {hasRet ? '✓' : ''}
+                                      </span>
+                                    </div>
+                                    
+                                    <span className="text-[6px] text-zinc-400 leading-none">{initial}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 2. Accounts: Job Items Table */}
               <div className="relative">
-                <div className="flex items-center gap-2 mb-4">
-                  <div className="h-4 w-1 bg-emerald-600 rounded-full" />
-                  <h3 className="text-xs font-black text-zinc-800 uppercase tracking-wider">تفصيل ورديات العمل</h3>
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="h-3.5 w-1 bg-emerald-600 rounded-full" />
+                    <h3 className="text-xs font-black text-zinc-800 uppercase tracking-wider">تفصيل الحسابات وبنود الشغل</h3>
+                  </div>
                 </div>
-                <table className="w-full text-sm">
+                <table className="w-full text-xs border border-zinc-200 rounded-xl overflow-hidden">
                   <thead>
-                    <tr className="text-zinc-400 border-b border-zinc-100">
-                      <th className="text-right py-3 font-black uppercase text-[10px]">البيان والتاريخ</th>
-                      <th className="text-center py-3 font-black uppercase text-[10px]">العدد</th>
-                      <th className="text-center py-3 font-black uppercase text-[10px]">السعر</th>
-                      <th className="text-left py-3 font-black uppercase text-[10px]">الإجمالي</th>
+                    <tr className="bg-zinc-100/80 text-zinc-600 border-b border-zinc-200">
+                      <th className="text-right py-2.5 px-3 font-black text-[10px]">البيان / التاريخ</th>
+                      <th className="text-center py-2.5 px-3 font-black text-[10px]">العدد / الورديات</th>
+                      <th className="text-center py-2.5 px-3 font-black text-[10px]">السعر الفردي</th>
+                      <th className="text-left py-2.5 px-3 font-black text-[10px]">الإجمالي</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-zinc-50">
+                  <tbody className="divide-y divide-zinc-100">
                     {(currentJobRecord?.items || []).map((item, i) => (
-                      <tr key={i} className="text-zinc-700">
-                        <td className="py-3">
-                          <p className="font-black text-zinc-800">{item.description}</p>
+                      <tr key={i} className="text-zinc-700 bg-white">
+                        <td className="py-2.5 px-3">
+                          <p className="font-black text-zinc-900">{item.description || 'بند عمل'}</p>
                           {item.date && <p className="text-[9px] text-zinc-400 font-bold">{new Date(item.date).toLocaleDateString('ar-EG')}</p>}
                         </td>
-                        <td className="text-center font-bold text-zinc-600">{item.rounds}</td>
-                        <td className="text-center font-bold text-zinc-600">{item.price}</td>
-                        <td className="text-left font-black text-emerald-700">{item.rounds * item.price}</td>
+                        <td className="text-center font-bold text-zinc-700 font-mono">{item.rounds}</td>
+                        <td className="text-center font-bold text-zinc-700 font-mono">{item.price} ج.م</td>
+                        <td className="text-left font-black text-emerald-700 font-mono py-2.5 px-3">{(item.rounds * item.price).toLocaleString()} ج.م</td>
                       </tr>
                     ))}
-                    <tr className="bg-emerald-50/50 font-black text-emerald-800">
-                       <td colSpan={3} className="py-3 px-4 rounded-r-2xl">إجمالي بنود الشغل</td>
-                       <td className="text-left py-3 px-4 rounded-l-2xl">{(currentJobRecord?.totalWork || 0).toLocaleString()} <span className="text-[10px] font-bold">ج.م</span></td>
+                    {(!currentJobRecord?.items || currentJobRecord.items.length === 0) && (
+                      <tr>
+                        <td colSpan={4} className="py-4 text-center text-zinc-400 text-xs italic">لا توجد بنود شغل مسجلة</td>
+                      </tr>
+                    )}
+                    <tr className="bg-emerald-50 font-black text-emerald-900 border-t border-emerald-200">
+                       <td colSpan={3} className="py-2.5 px-3">إجمالي مستحقات الشغل</td>
+                       <td className="text-left py-2.5 px-3 font-mono font-black text-emerald-800">
+                         {(currentJobRecord?.totalWork || 0).toLocaleString()} <span className="text-[10px]">ج.م</span>
+                       </td>
                     </tr>
                   </tbody>
                 </table>
               </div>
 
-              <div className="relative grid grid-cols-2 gap-8 pt-4">
-                <div className="space-y-4">
-                   <div className="flex items-center gap-2">
-                      <div className="h-4 w-1 bg-orange-500 rounded-full" />
-                      <h3 className="text-xs font-black text-zinc-800 uppercase tracking-wider">الخصومات والسلف</h3>
+              {/* 3. Deductions & Net Pay Summary */}
+              <div className="relative grid grid-cols-12 gap-4 pt-2">
+                {/* Deductions column */}
+                <div className="col-span-6 bg-zinc-50 border border-zinc-200 rounded-2xl p-3.5 space-y-2.5">
+                   <div className="flex items-center gap-1.5">
+                      <div className="h-3 w-1 bg-orange-500 rounded-full" />
+                      <h3 className="text-xs font-black text-zinc-800 uppercase tracking-wider">الخصومات والسلفيات</h3>
                    </div>
-                   <div className="space-y-2">
+                   <div className="space-y-1.5 max-h-[140px] overflow-y-auto">
                       {(currentJobRecord?.deductions || []).map((d, i) => (
-                        <div key={i} className="flex justify-between items-center bg-zinc-50 px-3 py-2 rounded-xl">
+                        <div key={i} className="flex justify-between items-center bg-white px-2.5 py-1.5 rounded-lg border border-zinc-100 text-xs">
                           <div>
                             <p className="text-[10px] font-black text-zinc-800">{d.type}</p>
-                            <p className="text-[8px] text-zinc-400 font-bold">{d.date}</p>
+                            {d.date && <p className="text-[8px] text-zinc-400 font-bold">{d.date}</p>}
                           </div>
-                          <span className="text-xs font-black text-orange-600">-{d.amount}</span>
+                          <span className="text-xs font-black text-orange-600 font-mono">-{d.amount} ج.م</span>
                         </div>
                       ))}
                       {(!currentJobRecord?.deductions || currentJobRecord.deductions.length === 0) && (
-                        <p className="text-[10px] text-zinc-300 italic font-bold">لا يوجد خصومات</p>
+                        <p className="text-[10px] text-zinc-400 italic font-bold py-2 text-center">لا توجد خصومات لهذا الشهر</p>
                       )}
-                      <div className="border-t-2 border-orange-100 pt-2 font-black flex justify-between text-orange-600 text-xs">
-                         <span>إجمالي المستقطع</span>
-                         <span>-{currentJobRecord?.totalDeductions || 0} ج.م</span>
-                      </div>
+                   </div>
+                   <div className="border-t border-orange-200 pt-2 font-black flex justify-between text-orange-700 text-xs">
+                      <span>إجمالي المستقطع:</span>
+                      <span className="font-mono">-{currentJobRecord?.totalDeductions || 0} ج.م</span>
                    </div>
                 </div>
-                <div className="bg-emerald-600 rounded-[32px] p-6 flex flex-col justify-center items-center text-white shadow-2xl shadow-emerald-200">
-                   <p className="text-[10px] font-black text-emerald-100 uppercase mb-2 tracking-widest">صافي القبض</p>
-                   <div className="flex items-baseline gap-1">
-                      <p className="text-5xl font-black tracking-tighter">{(currentJobRecord?.netPay || 0).toLocaleString()}</p>
-                      <span className="text-xs font-bold opacity-80">ج.م</span>
+
+                {/* Net Pay card */}
+                <div className="col-span-6 bg-gradient-to-br from-emerald-600 to-emerald-700 rounded-2xl p-4 flex flex-col justify-center items-center text-white shadow-lg shadow-emerald-200">
+                   <p className="text-[10px] font-black text-emerald-100 uppercase mb-1 tracking-widest">صافي المبلغ المستحق للقبض</p>
+                   <div className="flex items-baseline gap-1.5">
+                      <p className="text-4xl font-black tracking-tight font-mono">{(currentJobRecord?.netPay || 0).toLocaleString()}</p>
+                      <span className="text-sm font-bold opacity-90">جنيه مصري</span>
                    </div>
-                   <div className="mt-4 bg-white/20 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">Confirmed & Valid</div>
+                   <div className="mt-3 bg-white/20 px-3 py-1 rounded-full text-[9px] font-black">
+                     {currentJobRecord?.isPaid ? "✓ تم الصرف والتسليم" : "مستحق للصرف"}
+                   </div>
                 </div>
               </div>
 
-              <div className="relative pt-8 border-t border-dashed border-zinc-200 flex justify-between items-center text-zinc-400">
-                <p className="text-[9px] font-bold">تاريخ التقرير: {new Date().toLocaleDateString('ar-EG')}</p>
-                <p className="text-[9px] font-black uppercase tracking-[0.2em] text-emerald-600/50">DriverPay Manager</p>
+              {/* Footer */}
+              <div className="relative pt-3 border-t border-dashed border-zinc-200 flex justify-between items-center text-zinc-400 text-[9px] font-bold">
+                <p>تم استخراج التقرير بتاريخ: {new Date().toLocaleDateString('ar-EG')}</p>
+                <p className="font-black tracking-wider text-emerald-700">نظام إدارة مستحقات السائقين • DriverPay Manager</p>
               </div>
            </div>
         </div>

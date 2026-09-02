@@ -9,7 +9,9 @@ import {
   Save, 
   RotateCcw, 
   ArrowRight,
-  Briefcase
+  Briefcase,
+  ChevronRight,
+  ChevronLeft
 } from 'lucide-react';
 
 interface DailyManualJobLogProps {
@@ -18,6 +20,7 @@ interface DailyManualJobLogProps {
   jobRecord: JobRecord | null;
   onSaveJobRecord: (data: Partial<JobRecord>) => void;
   onSwitchToDetails?: () => void;
+  onMonthChange?: (newMonth: string) => void;
 }
 
 export const DailyManualJobLog: React.FC<DailyManualJobLogProps> = ({
@@ -25,7 +28,8 @@ export const DailyManualJobLog: React.FC<DailyManualJobLogProps> = ({
   driver,
   jobRecord,
   onSaveJobRecord,
-  onSwitchToDetails
+  onSwitchToDetails,
+  onMonthChange
 }) => {
   // Days calculation for selected month
   const { daysList, monthLabel } = useMemo(() => {
@@ -260,19 +264,74 @@ export const DailyManualJobLog: React.FC<DailyManualJobLogProps> = ({
     };
   }, [shifts]);
 
+  const getPrevMonth = (mStr: string) => {
+    const [y, m] = mStr.split('-').map(Number);
+    let prevM = m - 1;
+    let prevY = y;
+    if (prevM === 0) {
+      prevM = 12;
+      prevY = y - 1;
+    }
+    return `${prevY}-${String(prevM).padStart(2, '0')}`;
+  };
+
+  const getNextMonth = (mStr: string) => {
+    const [y, m] = mStr.split('-').map(Number);
+    let nextM = m + 1;
+    let nextY = y;
+    if (nextM === 13) {
+      nextM = 1;
+      nextY = y + 1;
+    }
+    return `${nextY}-${String(nextM).padStart(2, '0')}`;
+  };
+
   return (
     <div className="space-y-6 animate-in fade-in duration-200">
       {/* Top Banner & Driver Overview */}
       <div className="bg-gradient-to-l from-emerald-700 via-emerald-600 to-teal-700 rounded-3xl p-5 sm:p-6 text-white shadow-xl shadow-emerald-900/10">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="bg-emerald-500/30 text-emerald-100 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-emerald-400/20">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="bg-emerald-500/30 text-emerald-100 text-[10px] font-black px-2.5 py-1 rounded-full border border-emerald-400/20">
                 تسجيل الحضور والشغل اليومي
               </span>
-              <span className="text-emerald-200 text-xs font-bold">
-                {monthLabel}
-              </span>
+
+              {/* Prominent Month Badge & Switcher */}
+              <div className="flex items-center gap-1.5 bg-emerald-950/70 border border-emerald-400/30 p-1 px-2.5 rounded-xl shadow-inner">
+                <span className="text-amber-300 text-xs font-black">
+                  شهر: {monthLabel}
+                </span>
+
+                {onMonthChange && (
+                  <div className="flex items-center gap-1 mr-1 border-r border-emerald-400/20 pr-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onMonthChange(getPrevMonth(selectedMonth))}
+                      title="الشهر السابق"
+                      className="p-1 text-white hover:bg-white/20 active:scale-95 rounded-lg transition-all flex items-center gap-0.5 text-[10px] font-bold px-1.5"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">السابق</span>
+                    </button>
+                    <input
+                      type="month"
+                      value={selectedMonth}
+                      onChange={(e) => e.target.value && onMonthChange(e.target.value)}
+                      className="bg-emerald-800 hover:bg-emerald-700 text-white text-[11px] font-black px-1.5 py-0.5 rounded-md border border-emerald-400/30 cursor-pointer focus:ring-0"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => onMonthChange(getNextMonth(selectedMonth))}
+                      title="الشهر التالي"
+                      className="p-1 text-white hover:bg-white/20 active:scale-95 rounded-lg transition-all flex items-center gap-0.5 text-[10px] font-bold px-1.5"
+                    >
+                      <span className="hidden sm:inline">التالي</span>
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
             <h2 className="text-xl sm:text-2xl font-black flex items-center gap-2">
               <span>جدول ورديات: {driver.name}</span>
