@@ -102,6 +102,18 @@ const getNextMonthStr = (monthStr: string): string => {
   return `${nextYear}-${String(nextMonth).padStart(2, '0')}`;
 };
 
+const getRelativeMonthStr = (baseMonth: string, offset: number): string => {
+  try {
+    const [yearStr, monthStrPart] = baseMonth.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStrPart, 10);
+    const d = new Date(year, month - 1 + offset, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  } catch (e) {
+    return baseMonth;
+  }
+};
+
 const formatMonthLabel = (monthStr: string): string => {
   try {
     const [yearStr, monthStrPart] = monthStr.split('-');
@@ -647,35 +659,36 @@ export default function App() {
   };
 
   const [isRestoringItems, setIsRestoringItems] = useState(false);
+  const [showCustomMonthModal, setShowCustomMonthModal] = useState(false);
+  const [customRestoreMonth, setCustomRestoreMonth] = useState(() => getPreviousMonthStr(selectedMonth));
 
-  const handleRestoreLastMonthItems = async () => {
-    if (!currentDriver || !user) return;
-    const prevMonth = getPreviousMonthStr(selectedMonth);
-    const prevRecordId = `${currentDriver.id}_${prevMonth}`;
+  const restoreItemsFromMonth = async (targetMonth: string, dialogTitle = "استرجاع بنود الشغل") => {
+    if (!currentDriver || !user) return false;
+    const targetRecordId = `${currentDriver.id}_${targetMonth}`;
 
     setIsRestoringItems(true);
     try {
-      const prevDocSnap = await getDoc(doc(db, 'jobRecords', prevRecordId));
-      if (!prevDocSnap.exists()) {
+      const targetDocSnap = await getDoc(doc(db, 'jobRecords', targetRecordId));
+      if (!targetDocSnap.exists()) {
         triggerAlert(
-          "استرجاع بنود الشهر السابق",
-          `لم يتم العثور على أي سجل شغل للسائق (${currentDriver.name}) في شهر (${formatMonthLabel(prevMonth)} - ${prevMonth}).`
+          dialogTitle,
+          `لم يتم العثور على أي سجل شغل للسائق (${currentDriver.name}) في شهر (${formatMonthLabel(targetMonth)} - ${targetMonth}).`
         );
         setIsRestoringItems(false);
-        return;
+        return false;
       }
 
-      const prevData = prevDocSnap.data() as JobRecord;
+      const prevData = targetDocSnap.data() as JobRecord;
       const prevItems = prevData?.items || [];
       const validItems = prevItems.filter(it => it.description && it.description.trim() !== '');
 
       if (validItems.length === 0) {
         triggerAlert(
-          "استرجاع بنود الشهر السابق",
-          `لا توجد بنود شغل مسجلة في سجل شهر (${formatMonthLabel(prevMonth)} - ${prevMonth}) لهذا السائق.`
+          dialogTitle,
+          `لا توجد بنود شغل مسجلة في سجل شهر (${formatMonthLabel(targetMonth)} - ${targetMonth}) لهذا السائق.`
         );
         setIsRestoringItems(false);
-        return;
+        return false;
       }
 
       const newItemsToSet: JobItem[] = validItems.map(it => ({
@@ -691,14 +704,14 @@ export default function App() {
         await saveJobRecord({ items: newItemsToSet });
         triggerSuccess(
           "تم استرجاع البنود",
-          `تم بنجاح استرجاع (${newItemsToSet.length}) بند من شهر ${formatMonthLabel(prevMonth)} مع تعيين عدد الورديات إلى 0 والاحتفاظ بالوصف وسعر الوردية.`
+          `تم بنجاح استرجاع (${newItemsToSet.length}) بند من شهر ${formatMonthLabel(targetMonth)} مع تعيين عدد الورديات إلى 0 والاحتفاظ بالوصف وسعر الوردية.`
         );
       };
 
       if (hasExistingItems) {
         triggerConfirm(
-          "استرجاع بنود الشهر السابق",
-          `يوجد حالياً (${currentItems.length}) بند في هذا الشهر.\n\nهل تريد استبدالها ببنود الشهر السابق (${validItems.length} بند) مع ضبط عدد الورديات إلى 0؟`,
+          dialogTitle,
+          `يوجد حالياً (${currentItems.length}) بند في هذا الشهر.\n\nهل تريد استبدالها ببنود شهر (${formatMonthLabel(targetMonth)}) (${validItems.length} بند) مع ضبط عدد الورديات إلى 0؟`,
           async () => {
             await performRestore();
           }
@@ -706,12 +719,32 @@ export default function App() {
       } else {
         await performRestore();
       }
+      return true;
     } catch (err) {
       console.error(err);
-      triggerAlert("حدث خطأ", "حدث خطأ أثناء محاولة استرجاع بنود الشهر السابق من قاعدة البيانات.");
+      triggerAlert("حدث خطأ", "حدث خطأ أثناء محاولة استرجاع بنود الشغل من قاعدة البيانات.");
+      return false;
     } finally {
       setIsRestoringItems(false);
     }
+  };
+
+  const handleRestoreLastMonthItems = async () => {
+    const prevMonth = getPreviousMonthStr(selectedMonth);
+    await restoreItemsFromMonth(prevMonth, "استرجاع بنود الشهر السابق");
+  };
+
+  const handleRestoreCustomMonthItems = async () => {
+    if (!customRestoreMonth) {
+      triggerAlert("تنبيه", "يرجى اختيار الشهر المراد استرجاع البنود منه.");
+      return;
+    }
+    if (customRestoreMonth === selectedMonth) {
+      triggerAlert("تنبيه", "لقد اخترت نفس الشهر الحالي! يرجى اختيار شهر آخر لاسترجاع البنود منه.");
+      return;
+    }
+    setShowCustomMonthModal(false);
+    await restoreItemsFromMonth(customRestoreMonth, `استرجاع بنود شهر (${formatMonthLabel(customRestoreMonth)})`);
   };
 
   const handleShareReport = async () => {
@@ -1486,17 +1519,34 @@ export default function App() {
                           items={currentJobRecord?.items || []}
                           onAdd={() => saveJobRecord({ items: [...(currentJobRecord?.items || []), { description: '', rounds: 0, price: 0 }] })}
                           headerAction={
-                            <button
-                              type="button"
-                              onClick={handleRestoreLastMonthItems}
-                              disabled={isRestoringItems}
-                              title="استرجاع بنود الشهر السابق (الوصف وسعر الوردية فقط مع ضبط الورديات 0)"
-                              className="flex items-center gap-1 text-[10px] sm:text-xs font-bold bg-white/80 hover:bg-white text-emerald-800 hover:text-emerald-950 px-2 sm:px-2.5 py-1 rounded-lg border border-emerald-300 shadow-2xs transition-all active:scale-95 disabled:opacity-50"
-                            >
-                              <RotateCcw className={cn("w-3.5 h-3.5 text-emerald-700", isRestoringItems && "animate-spin")} />
-                              <span className="hidden xs:inline sm:inline">استرجاع بنود الشهر السابق</span>
-                              <span className="xs:hidden sm:hidden">الشهر السابق</span>
-                            </button>
+                            <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={handleRestoreLastMonthItems}
+                                disabled={isRestoringItems}
+                                title="استرجاع بنود الشهر السابق (الوصف وسعر الوردية فقط مع ضبط الورديات 0)"
+                                className="flex items-center gap-1 text-[10px] sm:text-xs font-bold bg-white/80 hover:bg-white text-emerald-800 hover:text-emerald-950 px-2 sm:px-2.5 py-1 rounded-lg border border-emerald-300 shadow-2xs transition-all active:scale-95 disabled:opacity-50"
+                              >
+                                <RotateCcw className={cn("w-3.5 h-3.5 text-emerald-700", isRestoringItems && "animate-spin")} />
+                                <span className="hidden sm:inline">استرجاع بنود الشهر السابق</span>
+                                <span className="sm:hidden">الشهر السابق</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCustomRestoreMonth(getPreviousMonthStr(selectedMonth));
+                                  setShowCustomMonthModal(true);
+                                }}
+                                disabled={isRestoringItems}
+                                title="استرجاع بنود شغل من شهر تحدده أنت (الوصف وسعر الوردية فقط مع ضبط الورديات 0)"
+                                className="flex items-center gap-1 text-[10px] sm:text-xs font-bold bg-white/80 hover:bg-white text-blue-800 hover:text-blue-950 px-2 sm:px-2.5 py-1 rounded-lg border border-blue-300 shadow-2xs transition-all active:scale-95 disabled:opacity-50"
+                              >
+                                <Calendar className="w-3.5 h-3.5 text-blue-700" />
+                                <span className="hidden sm:inline">استرجاع من شهر محدد</span>
+                                <span className="sm:hidden">شهر محدد</span>
+                              </button>
+                            </div>
                           }
                           onUpdate={(idx, field, val) => {
                             const newItems = [...(currentJobRecord?.items || [])];
@@ -2582,6 +2632,145 @@ export default function App() {
                   تأكيد الحذف
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+
+        {showCustomMonthModal && (
+          <div className="fixed inset-0 z-[105] flex items-center justify-center p-4 rtl">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowCustomMonthModal(false)}
+              className="fixed inset-0 bg-zinc-900/60 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-[32px] w-full max-w-md p-6 relative z-10 shadow-2xl text-right flex flex-col font-sans"
+            >
+              <div className="flex items-center justify-between pb-4 border-b border-zinc-100">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-10 h-10 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <Calendar className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-black text-zinc-800">استرجاع بنود من شهر محدد</h3>
+                    <p className="text-[11px] font-bold text-zinc-400">
+                      السائق: <span className="text-zinc-700">{currentDriver?.name}</span> (كود: {currentDriver?.code})
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  type="button"
+                  onClick={() => setShowCustomMonthModal(false)}
+                  className="p-1.5 text-zinc-400 hover:text-zinc-600 rounded-xl hover:bg-zinc-100 transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={(e) => { e.preventDefault(); handleRestoreCustomMonthItems(); }} className="py-4 space-y-4">
+                <div className="bg-amber-50/80 border border-amber-200/60 rounded-2xl p-3 text-xs text-amber-900 leading-relaxed">
+                  <div className="flex items-center gap-1.5 font-bold mb-1 text-amber-950">
+                    <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                    <span>ملاحظة</span>
+                  </div>
+                  سيتم استرجاع <strong>وصف العمل</strong> و<strong>سعر الوردية</strong> فقط من الشهر المختار، وضبط عدد الورديات إلى <strong>0</strong> تلقائياً لشهر ({formatMonthLabel(selectedMonth)}).
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-zinc-600 mb-2">
+                    اختر الشهر المراد استرجاع البنود منه:
+                  </label>
+                  <input 
+                    type="month"
+                    value={customRestoreMonth}
+                    onChange={(e) => setCustomRestoreMonth(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-zinc-50 border border-zinc-200 rounded-xl text-sm font-bold text-zinc-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white text-center"
+                    required
+                  />
+
+                  {customRestoreMonth && (
+                    <div className="mt-2.5 p-2.5 bg-blue-50/70 border border-blue-100 rounded-xl flex items-center justify-between text-xs">
+                      <span className="font-bold text-blue-900">الشهر المختار:</span>
+                      <span className="font-black text-blue-700">{formatMonthLabel(customRestoreMonth)} ({customRestoreMonth})</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Quick Month Step Buttons */}
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCustomRestoreMonth(prev => getPreviousMonthStr(prev))}
+                    className="flex-1 py-1.5 px-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-[11px] font-bold text-zinc-700 flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                    <span>الشهر السابق</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomRestoreMonth(prev => getNextMonthStr(prev))}
+                    className="flex-1 py-1.5 px-2.5 bg-zinc-100 hover:bg-zinc-200 rounded-xl text-[11px] font-bold text-zinc-700 flex items-center justify-center gap-1 transition-colors"
+                  >
+                    <span>الشهر التالي</span>
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+
+                {/* Quick Presets */}
+                <div>
+                  <p className="text-[10px] font-bold text-zinc-400 mb-1.5">اختصارات سريعة للأشهر السابقة:</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {[-1, -2, -3].map(offset => {
+                      const mStr = getRelativeMonthStr(selectedMonth, offset);
+                      const isSelected = customRestoreMonth === mStr;
+                      return (
+                        <button
+                          key={offset}
+                          type="button"
+                          onClick={() => setCustomRestoreMonth(mStr)}
+                          className={cn(
+                            "px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all",
+                            isSelected 
+                              ? "bg-blue-600 border-blue-600 text-white shadow-xs" 
+                              : "bg-zinc-50 border-zinc-200 text-zinc-600 hover:bg-zinc-100"
+                          )}
+                        >
+                          {offset === -1 ? 'الشهر السابق' : offset === -2 ? 'قبل شهرين' : 'قبل 3 أشهر'} ({formatMonthLabel(mStr)})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 pt-3 border-t border-zinc-100">
+                  <button 
+                    type="button"
+                    onClick={() => setShowCustomMonthModal(false)}
+                    className="py-3 bg-zinc-100 text-zinc-600 rounded-xl font-bold hover:bg-zinc-200 transition-all text-xs"
+                  >
+                    إلغاء
+                  </button>
+                  <button 
+                    type="submit"
+                    disabled={isRestoringItems || !customRestoreMonth}
+                    className="py-3 bg-blue-600 hover:bg-blue-700 active:scale-95 text-white rounded-xl font-bold shadow-lg shadow-blue-100 transition-all text-xs flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isRestoringItems ? (
+                      <span>جاري الاسترجاع...</span>
+                    ) : (
+                      <>
+                        <RotateCcw className="w-4 h-4" />
+                        <span>استرجاع البنود</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}
