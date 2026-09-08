@@ -37,7 +37,8 @@ import {
   WifiOff,
   CloudCheck,
   Check,
-  RotateCcw
+  RotateCcw,
+  ArrowUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DailyManualJobLog } from './components/DailyManualJobLog';
@@ -305,6 +306,8 @@ export default function App() {
   const [showReports, setShowReports] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
+  const [showStickyDriverBar, setShowStickyDriverBar] = useState(false);
+  const driverNavRef = React.useRef<HTMLDivElement>(null);
 
   // Monitor network online/offline status
   useEffect(() => {
@@ -425,6 +428,23 @@ export default function App() {
     if (currentDriver) {
       setActiveTab('details');
     }
+  }, [currentDriver?.id]);
+
+  // Monitor scroll to display floating sticky driver navigation bar below the main header
+  useEffect(() => {
+    const handleScroll = () => {
+      if (driverNavRef.current) {
+        const rect = driverNavRef.current.getBoundingClientRect();
+        // Show sticky bar when the main navigation card has scrolled up past the top header
+        setShowStickyDriverBar(rect.bottom < 60);
+      } else {
+        setShowStickyDriverBar(window.scrollY > 200);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
   }, [currentDriver?.id]);
 
   useEffect(() => {
@@ -966,125 +986,223 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-zinc-50 rtl font-sans pb-20 lg:pb-0">
-      {/* Header */}
-      <header className="bg-white border-b border-zinc-200 sticky top-0 z-30 px-3 sm:px-4 py-2.5 flex items-center justify-between">
-        <div className="flex items-center gap-2 sm:gap-3">
-
-          {/* Compact Network Status & Saved Indicators */}
-          <div className="flex items-center gap-1.5 bg-zinc-50 border border-zinc-200/80 px-2 py-1 rounded-xl shadow-xs">
-            {/* WiFi connection badge */}
-            <div 
-              className={cn(
-                "flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md transition-colors",
-                isOnline 
-                  ? "text-emerald-700 bg-emerald-100/70" 
-                  : "text-rose-700 bg-rose-100/70 animate-pulse"
-              )}
-              title={isOnline ? "متصل بالإنترنت" : "غير متصل بالإنترنت"}
-            >
-              {isOnline ? (
-                <Wifi className="w-3 h-3 text-emerald-600 shrink-0" />
-              ) : (
-                <WifiOff className="w-3 h-3 text-rose-600 shrink-0" />
-              )}
-              <span className="hidden xs:inline sm:inline">{isOnline ? "متصل" : "أوفلاين"}</span>
-            </div>
-
-            <div className="w-[1px] h-3 bg-zinc-200" />
-
-            {/* Save indicator badge */}
-            <div 
-              className={cn(
-                "flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md transition-all",
-                saveStatus === 'saving'
-                  ? "text-amber-700 bg-amber-100/70"
-                  : "text-sky-700 bg-sky-100/70"
-              )}
-              title={saveStatus === 'saving' ? "جاري الحفظ بالسحابة..." : "تم حفظ جميع التعديلات في السحابة"}
-            >
-              {saveStatus === 'saving' ? (
-                <span className="w-2.5 h-2.5 rounded-full border-2 border-amber-600 border-t-transparent animate-spin shrink-0" />
-              ) : (
-                <Check className="w-3 h-3 text-sky-600 stroke-[3] shrink-0" />
-              )}
-              <span className="hidden xs:inline sm:inline">{saveStatus === 'saving' ? "جاري الحفظ" : "تم الحفظ"}</span>
-            </div>
-          </div>
-          {/* Header Month Switcher & Quick Indicator */}
-          <div className="flex items-center gap-1 bg-emerald-50/80 border border-emerald-200/80 px-2 py-1 rounded-xl shadow-xs">
-            <button
-              onClick={() => setSelectedMonth(prev => getPreviousMonthStr(prev))}
-              title="الشهر السابق"
-              className="p-1 text-emerald-800 hover:text-emerald-950 hover:bg-emerald-100/80 active:scale-90 rounded-md transition-all flex items-center"
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-            <div className="flex items-center gap-1 px-1">
-              <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-              <span className="text-xs font-black text-emerald-900 font-sans">
-                {formatMonthLabel(selectedMonth)}
-              </span>
-            </div>
-            <button
-              onClick={() => setSelectedMonth(prev => getNextMonthStr(prev))}
-              title="الشهر التالي"
-              className="p-1 text-emerald-800 hover:text-emerald-950 hover:bg-emerald-100/80 active:scale-90 rounded-md transition-all flex items-center"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          {/* Add Driver Button - Compact on Mobile (matching other buttons), Full on Desktop */}
-          <button 
-            onClick={() => setShowAddForm(true)}
-            title="إضافة سائق جديد"
-            className="sm:hidden p-2 text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition-colors border border-emerald-200/60"
-          >
-            <Plus className="w-5 h-5" />
-          </button>
+      {/* Sticky Header & Driver Sub-Bar Container */}
+      <div className="sticky top-0 z-30">
+        <header className="bg-white border-b border-zinc-200 px-3 sm:px-4 py-2 sm:py-2.5 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
           
-          <button 
-            onClick={() => setShowAddForm(true)}
-            className="hidden sm:flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-100 transition-all font-sans"
-          >
-            <Plus className="w-4 h-4" />
-            <span>إضافة سائق</span>
-          </button>
-          
-          <div className="flex items-center gap-1 border-r border-zinc-100 pr-1.5 sm:pr-2 mr-1 sm:mr-2">
-            <button 
-              onClick={() => { setSidebarTab('active'); setShowDriverSelector(true); }}
-              title="بحث سريع"
-              className="p-2 text-zinc-400 hover:text-emerald-600 transition-colors bg-zinc-50 rounded-lg hover:bg-emerald-50"
-            >
-              <Search className="w-5 h-5" />
-            </button>
-            <button 
-              onClick={() => setShowReports(true)}
-              title="التقارير والإحصائيات"
-              className="p-2 text-zinc-400 hover:text-blue-600 transition-colors bg-zinc-50 rounded-lg hover:bg-blue-50"
-            >
-              <BarChart3 className="w-5 h-5" />
-            </button>
-            <button 
-              onClick={() => setShowSettings(true)}
-              title="الإعدادات والنسخ الاحتياطي"
-              className="p-2 text-zinc-400 hover:text-emerald-600 transition-colors bg-zinc-50 rounded-lg hover:bg-emerald-50"
-            >
-              <Settings className="w-5 h-5" />
-            </button>
-            <button 
-              onClick={() => signOut(auth)}
-              title="تسجيل الخروج"
-              className="p-2 text-zinc-400 hover:text-red-500 transition-colors bg-zinc-50 rounded-lg hover:bg-red-50"
-            >
-              <LogOut className="w-5 h-5" />
-            </button>
+          {/* Top Row on Mobile / Left Group on Desktop */}
+          <div className="flex items-center justify-between sm:justify-start gap-2 sm:gap-3">
+            {/* Header Month Switcher & Quick Indicator */}
+            <div className="flex items-center gap-1 bg-emerald-50/90 border border-emerald-200/90 px-2 py-1 rounded-xl shadow-2xs">
+              <button
+                onClick={() => setSelectedMonth(prev => getPreviousMonthStr(prev))}
+                title="الشهر السابق"
+                className="p-1 text-emerald-800 hover:text-emerald-950 hover:bg-emerald-100/80 active:scale-90 rounded-md transition-all flex items-center"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+              <div className="flex items-center gap-1 px-1">
+                <Calendar className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                <span className="text-xs font-black text-emerald-900 font-sans">
+                  {formatMonthLabel(selectedMonth)}
+                </span>
+              </div>
+              <button
+                onClick={() => setSelectedMonth(prev => getNextMonthStr(prev))}
+                title="الشهر التالي"
+                className="p-1 text-emerald-800 hover:text-emerald-950 hover:bg-emerald-100/80 active:scale-90 rounded-md transition-all flex items-center"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Compact Network Status & Saved Indicators */}
+            <div className="flex items-center gap-1.5 bg-zinc-50 border border-zinc-200/80 px-2 py-1 rounded-xl shadow-2xs">
+              {/* WiFi connection badge */}
+              <div 
+                className={cn(
+                  "flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md transition-colors",
+                  isOnline 
+                    ? "text-emerald-700 bg-emerald-100/70" 
+                    : "text-rose-700 bg-rose-100/70 animate-pulse"
+                )}
+                title={isOnline ? "متصل بالإنترنت" : "غير متصل بالإنترنت"}
+              >
+                {isOnline ? (
+                  <Wifi className="w-3 h-3 text-emerald-600 shrink-0" />
+                ) : (
+                  <WifiOff className="w-3 h-3 text-rose-600 shrink-0" />
+                )}
+                <span>{isOnline ? "متصل" : "أوفلاين"}</span>
+              </div>
+
+              <div className="w-[1px] h-3 bg-zinc-200" />
+
+              {/* Save indicator badge */}
+              <div 
+                className={cn(
+                  "flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md transition-all",
+                  saveStatus === 'saving'
+                    ? "text-amber-700 bg-amber-100/70"
+                    : "text-sky-700 bg-sky-100/70"
+                )}
+                title={saveStatus === 'saving' ? "جاري الحفظ بالسحابة..." : "تم حفظ جميع التعديلات في السحابة"}
+              >
+                {saveStatus === 'saving' ? (
+                  <span className="w-2.5 h-2.5 rounded-full border-2 border-amber-600 border-t-transparent animate-spin shrink-0" />
+                ) : (
+                  <Check className="w-3 h-3 text-sky-600 stroke-[3] shrink-0" />
+                )}
+                <span>{saveStatus === 'saving' ? "جاري الحفظ" : "تم الحفظ"}</span>
+              </div>
+            </div>
           </div>
+
+          {/* Action Row on Mobile / Right Group on Desktop */}
+          <div className="flex items-center justify-between sm:justify-end gap-2 pt-1.5 sm:pt-0 border-t border-zinc-100 sm:border-t-0">
+            {/* Add Driver Button */}
+            <button 
+              onClick={() => setShowAddForm(true)}
+              className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold hover:bg-emerald-700 active:scale-95 shadow-xs transition-all font-sans"
+              title="إضافة سائق جديد"
+            >
+              <Plus className="w-4 h-4" />
+              <span>إضافة سائق</span>
+            </button>
+            
+            {/* Utility Buttons */}
+            <div className="flex items-center gap-1 sm:gap-1.5">
+              <button 
+                onClick={() => { setSidebarTab('active'); setShowDriverSelector(true); }}
+                title="بحث سريع عن سائق"
+                className="p-1.5 sm:p-2 text-zinc-600 hover:text-emerald-600 transition-colors bg-zinc-50 hover:bg-emerald-50 border border-zinc-200/80 rounded-xl active:scale-95"
+              >
+                <Search className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+              <button 
+                onClick={() => setShowReports(true)}
+                title="التقارير والإحصائيات"
+                className="p-1.5 sm:p-2 text-zinc-600 hover:text-blue-600 transition-colors bg-zinc-50 hover:bg-blue-50 border border-zinc-200/80 rounded-xl active:scale-95"
+              >
+                <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+              <button 
+                onClick={() => setShowSettings(true)}
+                title="الإعدادات والنسخ الاحتياطي"
+                className="p-1.5 sm:p-2 text-zinc-600 hover:text-emerald-600 transition-colors bg-zinc-50 hover:bg-emerald-50 border border-zinc-200/80 rounded-xl active:scale-95"
+              >
+                <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+              <button 
+                onClick={() => signOut(auth)}
+                title="تسجيل الخروج"
+                className="p-1.5 sm:p-2 text-zinc-600 hover:text-red-500 transition-colors bg-zinc-50 hover:bg-red-50 border border-zinc-200/80 rounded-xl active:scale-95"
+              >
+                <LogOut className="w-4 h-4 sm:w-5 sm:h-5" />
+              </button>
+            </div>
+          </div>
+
         </div>
       </header>
+
+      {/* Sticky Driver Navigation Bar when scrolled down */}
+      <AnimatePresence>
+        {showStickyDriverBar && currentDriver && (
+          <motion.div
+            initial={{ y: -16, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: -16, opacity: 0 }}
+            transition={{ duration: 0.18, ease: "easeOut" }}
+            className="bg-white/95 backdrop-blur-md border-b border-emerald-300/80 shadow-md px-2.5 sm:px-4 py-1.5 flex items-center justify-between gap-1.5 sm:gap-2"
+          >
+            {/* Previous Driver Button (RTL: Arrow pointing right goes to previous) */}
+            <button 
+              type="button"
+              onClick={handlePrevDriver}
+              disabled={currentIndex <= 0}
+              title="السائق السابق"
+              className="p-1.5 sm:p-2 text-zinc-700 hover:text-emerald-700 bg-zinc-50 hover:bg-emerald-50 border border-zinc-200/90 rounded-xl active:scale-95 disabled:opacity-30 disabled:pointer-events-none transition-all flex items-center justify-center shrink-0 shadow-2xs"
+            >
+              <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+
+            {/* Clickable Driver Information & Selector Trigger */}
+            <button 
+              type="button"
+              onClick={() => setShowDriverSelector(true)}
+              className="flex-1 min-w-0 flex items-center justify-center gap-2 sm:gap-3 px-2 py-1 rounded-xl hover:bg-zinc-50/80 transition-colors group text-right"
+              title="اضغط للبحث واختيار سائق آخر"
+            >
+              <div className="flex items-center gap-1.5 sm:gap-2 min-w-0 truncate">
+                <span className="text-xs sm:text-sm font-black text-zinc-900 group-hover:text-emerald-700 transition-colors truncate">
+                  {currentDriver.name}
+                </span>
+
+                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200/80 px-1.5 py-0.5 rounded-md shrink-0">
+                  كود: {currentDriver.code}
+                </span>
+
+                {currentDriver.factory && (
+                  <span className="text-[10px] font-semibold text-zinc-500 hidden sm:inline shrink-0">
+                    • {currentDriver.factory}
+                  </span>
+                )}
+                {currentDriver.route && (
+                  <span className="text-[10px] font-semibold text-zinc-500 hidden md:inline shrink-0">
+                    • {currentDriver.route}
+                  </span>
+                )}
+                {currentDriver.carType && (
+                  <span className="text-[10px] font-semibold text-zinc-500 hidden lg:inline shrink-0">
+                    • {currentDriver.carType}
+                  </span>
+                )}
+
+                {currentJobRecord?.notes && currentJobRecord.notes.length > 0 && (
+                  <span title="يوجد ملاحظات لهذا الشهر" className="w-2 h-2 rounded-full bg-orange-400 shrink-0 animate-pulse" />
+                )}
+
+                {currentJobRecord?.isPaid && (
+                  <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded shrink-0 hidden sm:inline">
+                    تم القبض
+                  </span>
+                )}
+              </div>
+
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200/70 px-1.5 sm:px-2 py-0.5 rounded-lg">
+                  {currentIndex + 1} / {currentDriverList.length}
+                </span>
+                <Search className="w-3 h-3 text-zinc-400 group-hover:text-emerald-600 transition-colors" />
+              </div>
+            </button>
+
+            {/* Next Driver Button (RTL: Arrow pointing left goes to next) */}
+            <button 
+              type="button"
+              onClick={handleNextDriver}
+              disabled={currentIndex >= currentDriverList.length - 1}
+              title="السائق التالي"
+              className="p-1.5 sm:p-2 text-zinc-700 hover:text-emerald-700 bg-zinc-50 hover:bg-emerald-50 border border-zinc-200/90 rounded-xl active:scale-95 disabled:opacity-30 disabled:pointer-events-none transition-all flex items-center justify-center shrink-0 shadow-2xs"
+            >
+              <ChevronLeft className="w-4 h-4 sm:w-5 sm:h-5" />
+            </button>
+
+            {/* Scroll to Top Button */}
+            <button
+              type="button"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              title="الرجوع لأعلى الصفحة"
+              className="p-1.5 sm:p-2 text-zinc-400 hover:text-zinc-700 bg-zinc-50 hover:bg-zinc-100 border border-zinc-200/80 rounded-xl active:scale-95 transition-all shrink-0"
+            >
+              <ArrowUp className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      </div>
 
       <main className="max-w-5xl mx-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
         
@@ -1259,7 +1377,10 @@ export default function App() {
           ) : (
             <>
               {/* Driver Navigation (Always Visible) */}
-              <div className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl border border-zinc-200 shadow-sm mb-4">
+              <div 
+                ref={driverNavRef}
+                className="flex items-center justify-between bg-white px-4 py-3 rounded-2xl border border-zinc-200 shadow-sm mb-4"
+              >
                 <button 
                   onClick={handlePrevDriver}
                   disabled={currentIndex === 0}
@@ -1596,13 +1717,13 @@ export default function App() {
                                   <div className="bg-emerald-100 p-2 rounded-lg text-emerald-600 hidden sm:block">
                                     <FileText className="w-4 h-4" />
                                   </div>
-                                  <input 
+                                  <SmartTextInput 
+                                    id={`item-desc-${idx}`}
                                     autoFocus={item.description === ''}
                                     placeholder="وصف العمل (مثال: نقلة وردية صباحية)" 
                                     className="flex-1 text-sm bg-zinc-50 border-none rounded-xl px-3 py-2 font-bold focus:ring-2 focus:ring-emerald-500 transition-all placeholder:font-normal" 
                                     value={item.description}
-                                    onChange={(e) => update(idx, 'description', e.target.value)}
-                                    onFocus={(e) => e.target.select()}
+                                    onChange={(val) => update(idx, 'description', val)}
                                   />
                                   <button onClick={() => remove(idx)} className="p-2 text-zinc-300 hover:text-red-500 transition-colors">
                                     <Trash2 className="w-4 h-4" />
@@ -1675,13 +1796,13 @@ export default function App() {
                                 <div className="flex gap-3 items-start">
                                   <div className="flex-1 space-y-1">
                                     <span className="text-[10px] font-black text-orange-400 mr-2">سبب الخصم</span>
-                                    <input 
+                                    <SmartTextInput 
+                                      id={`ded-type-${idx}`}
                                       autoFocus={item.type === ''}
                                       placeholder="مثلاً: ورشة، غسيل، مخالفة..." 
                                       className="w-full text-sm bg-white border-none rounded-xl px-4 py-3 font-bold shadow-sm focus:ring-2 focus:ring-orange-200" 
                                       value={item.type}
-                                      onChange={(e) => update(idx, 'type', e.target.value)}
-                                      onFocus={(e) => e.target.select()}
+                                      onChange={(val) => update(idx, 'type', val)}
                                     />
                                   </div>
                                   <button 
@@ -1807,14 +1928,15 @@ export default function App() {
                                   </button>
                                   
                                   <div className="flex-1">
-                                    <textarea
-                                      className="w-full bg-transparent border-none p-0 focus:ring-0 text-sm font-bold text-zinc-800 placeholder:text-zinc-300 resize-none"
+                                    <SmartTextarea
+                                      id={`driver-note-${note.id || idx}`}
+                                      className="w-full bg-transparent border-none p-0 focus:ring-0 text-sm font-bold text-zinc-800 placeholder:text-zinc-300 resize-none leading-relaxed"
                                       placeholder="اكتب ملاحظتك هنا..."
                                       rows={2}
                                       value={note.text}
-                                      onChange={(e) => {
+                                      onChange={(val) => {
                                         const updatedNotes = (currentJobRecord?.notes || []).map(n => 
-                                          n.id === note.id ? { ...n, text: e.target.value } : n
+                                          n.id === note.id ? { ...n, text: val } : n
                                         );
                                         saveJobRecord({ notes: updatedNotes });
                                       }}
@@ -2167,17 +2289,38 @@ export default function App() {
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-black text-zinc-400 uppercase">الاسم</label>
-                        <input required name="name" defaultValue={editingDriverId ? currentDriver?.name : ''} className="w-full bg-zinc-50 border-zinc-200 rounded-xl py-2 text-sm font-bold focus:ring-emerald-500" />
+                        <input 
+                          required 
+                          name="name" 
+                          dir="auto"
+                          autoComplete="on"
+                          autoCorrect="on"
+                          spellCheck={true}
+                          defaultValue={editingDriverId ? currentDriver?.name : ''} 
+                          className="w-full bg-zinc-50 border-zinc-200 rounded-xl py-2 text-sm font-bold focus:ring-emerald-500" 
+                        />
                       </div>
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-zinc-400 uppercase">الخط</label>
-                      <input name="route" defaultValue={editingDriverId ? currentDriver?.route : ''} className="w-full bg-zinc-50 border-zinc-200 rounded-xl py-2 text-sm font-bold focus:ring-emerald-500" />
+                      <input 
+                        name="route" 
+                        dir="auto"
+                        autoComplete="on"
+                        autoCorrect="on"
+                        spellCheck={true}
+                        defaultValue={editingDriverId ? currentDriver?.route : ''} 
+                        className="w-full bg-zinc-50 border-zinc-200 rounded-xl py-2 text-sm font-bold focus:ring-emerald-500" 
+                      />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-zinc-400 uppercase">المصنع</label>
                       <input 
                         name="factory" 
+                        dir="auto"
+                        autoComplete="on"
+                        autoCorrect="on"
+                        spellCheck={true}
                         list="factory-suggestions"
                         defaultValue={editingDriverId ? currentDriver?.factory : ''} 
                         className="w-full bg-zinc-50 border-zinc-200 rounded-xl py-2 text-sm font-bold focus:ring-emerald-500" 
@@ -2190,7 +2333,16 @@ export default function App() {
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-zinc-400 uppercase">نوع السيارة</label>
-                      <input name="carType" defaultValue={editingDriverId ? currentDriver?.carType : ''} className="w-full bg-zinc-50 border-zinc-200 rounded-xl py-2 text-sm font-bold focus:ring-emerald-500" placeholder="مثال: جامبو مكشوف" />
+                      <input 
+                        name="carType" 
+                        dir="auto"
+                        autoComplete="on"
+                        autoCorrect="on"
+                        spellCheck={true}
+                        defaultValue={editingDriverId ? currentDriver?.carType : ''} 
+                        className="w-full bg-zinc-50 border-zinc-200 rounded-xl py-2 text-sm font-bold focus:ring-emerald-500" 
+                        placeholder="مثال: جامبو مكشوف" 
+                      />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-zinc-400 uppercase">رقم الموبايل (11 رقم)</label>
@@ -3146,3 +3298,170 @@ function NumericInput({
     />
   );
 }
+
+function SmartTextInput({ 
+  value, 
+  onChange, 
+  placeholder,
+  className,
+  autoFocus = false,
+  dir = "auto",
+  id
+}: { 
+  value: string, 
+  onChange: (val: string) => void, 
+  placeholder?: string,
+  className?: string,
+  autoFocus?: boolean,
+  dir?: "auto" | "rtl" | "ltr",
+  id?: string
+}) {
+  const [localVal, setLocalVal] = useState<string>(value || '');
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  const debounceRef = React.useRef<NodeJS.Timeout | null>(null);
+  const lastEmittedValRef = React.useRef<string>(value || '');
+
+  useEffect(() => {
+    // Only synchronize from outside if the input is NOT actively focused
+    if (document.activeElement !== inputRef.current) {
+      setLocalVal(value || '');
+      lastEmittedValRef.current = value || '';
+    }
+  }, [value]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const nextVal = e.target.value;
+    setLocalVal(nextVal);
+
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    // Debounce to allow uninterrupted Arabic typing & virtual keyboard word predictions
+    debounceRef.current = setTimeout(() => {
+      lastEmittedValRef.current = nextVal;
+      onChange(nextVal);
+    }, 350);
+  };
+
+  const handleBlur = () => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    if (localVal !== lastEmittedValRef.current) {
+      lastEmittedValRef.current = localVal;
+      onChange(localVal);
+    }
+  };
+
+  return (
+    <input
+      id={id}
+      ref={inputRef}
+      type="text"
+      dir={dir}
+      autoComplete="on"
+      autoCorrect="on"
+      spellCheck={true}
+      autoCapitalize="sentences"
+      inputMode="text"
+      enterKeyHint="done"
+      autoFocus={autoFocus}
+      value={localVal}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      placeholder={placeholder}
+      className={className}
+    />
+  );
+}
+
+function SmartTextarea({ 
+  value, 
+  onChange, 
+  placeholder,
+  className,
+  rows = 2,
+  dir = "auto",
+  id
+}: { 
+  value: string, 
+  onChange: (val: string) => void, 
+  placeholder?: string,
+  className?: string,
+  rows?: number,
+  dir?: "auto" | "rtl" | "ltr",
+  id?: string
+}) {
+  const [localVal, setLocalVal] = useState<string>(value || '');
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null);
+  const debounceRef = React.useRef<NodeJS.Timeout | null>(null);
+  const lastEmittedValRef = React.useRef<string>(value || '');
+
+  useEffect(() => {
+    if (document.activeElement !== textareaRef.current) {
+      setLocalVal(value || '');
+      lastEmittedValRef.current = value || '';
+    }
+  }, [value]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+      }
+    };
+  }, []);
+
+  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const nextVal = e.target.value;
+    setLocalVal(nextVal);
+
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+
+    debounceRef.current = setTimeout(() => {
+      lastEmittedValRef.current = nextVal;
+      onChange(nextVal);
+    }, 350);
+  };
+
+  const handleBlur = () => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+    }
+    if (localVal !== lastEmittedValRef.current) {
+      lastEmittedValRef.current = localVal;
+      onChange(localVal);
+    }
+  };
+
+  return (
+    <textarea
+      id={id}
+      ref={textareaRef}
+      dir={dir}
+      autoComplete="on"
+      autoCorrect="on"
+      spellCheck={true}
+      autoCapitalize="sentences"
+      inputMode="text"
+      rows={rows}
+      value={localVal}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      placeholder={placeholder}
+      className={className}
+    />
+  );
+}
+

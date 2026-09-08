@@ -414,6 +414,12 @@ export const DailyManualJobLog: React.FC<DailyManualJobLogProps> = ({
                         <label className="text-[9px] font-black text-zinc-400">اسم الوردية:</label>
                         <input 
                           type="text"
+                          dir="auto"
+                          autoComplete="on"
+                          autoCorrect="on"
+                          spellCheck={true}
+                          autoCapitalize="sentences"
+                          inputMode="text"
                           value={editName}
                           onChange={(e) => setEditName(e.target.value)}
                           placeholder="مثال: وردية أساسية"

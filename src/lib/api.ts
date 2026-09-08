@@ -27,6 +27,15 @@ interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errCode = (error as { code?: string })?.code;
+  const errMsg = error instanceof Error ? error.message : String(error);
+
+  // Gracefully handle transient offline and unreachable connection states
+  if (errCode === 'unavailable' || errMsg.includes('the client is offline') || errMsg.includes('Could not reach Cloud Firestore backend')) {
+    console.warn(`Firestore offline/unavailable for ${operationType} at ${path}. Operating in offline cache mode.`);
+    return;
+  }
+
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
