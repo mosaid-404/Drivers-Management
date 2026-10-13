@@ -38,10 +38,13 @@ import {
   CloudCheck,
   Check,
   RotateCcw,
-  ArrowUp
+  ArrowUp,
+  Hash,
+  AlertTriangle
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { DailyManualJobLog } from './components/DailyManualJobLog';
+import { DriverCodeManagerModal } from './components/DriverCodeManagerModal';
 import { 
   collection, 
   onSnapshot, 
@@ -303,11 +306,22 @@ export default function App() {
   const [sidebarTab, setSidebarTab] = useState<'active' | 'retired'>('active');
   const [showDriverSelector, setShowDriverSelector] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showCodeManager, setShowCodeManager] = useState(false);
   const [showReports, setShowReports] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('saved');
   const [showStickyDriverBar, setShowStickyDriverBar] = useState(false);
   const driverNavRef = React.useRef<HTMLDivElement>(null);
+
+  // Calculate drivers with duplicate codes
+  const duplicateDriverCodesCount = useMemo(() => {
+    const counts: Record<string, number> = {};
+    drivers.forEach(d => {
+      const c = (d.code || '').trim();
+      if (c) counts[c] = (counts[c] || 0) + 1;
+    });
+    return drivers.filter(d => (counts[(d.code || '').trim()] || 0) > 1).length;
+  }, [drivers]);
 
   // Monitor network online/offline status
   useEffect(() => {
@@ -490,9 +504,10 @@ export default function App() {
       return;
     }
 
+    const code = ((formData.get('code') as string) || '').trim();
     const driverData = {
       userId: user.uid,
-      code: formData.get('code') as string,
+      code: code,
       name: formData.get('name') as string,
       route: formData.get('route') as string,
       factory: formData.get('factory') as string,
@@ -502,20 +517,37 @@ export default function App() {
       updatedAt: serverTimestamp(),
     };
 
-    try {
-      if (editingDriverId) {
-        await updateDoc(doc(db, 'drivers', editingDriverId), driverData);
-      } else {
-        await addDoc(collection(db, 'drivers'), {
-          ...driverData,
-          createdAt: serverTimestamp(),
-        });
+    const executeDriverSave = async () => {
+      try {
+        if (editingDriverId) {
+          await updateDoc(doc(db, 'drivers', editingDriverId), driverData);
+        } else {
+          await addDoc(collection(db, 'drivers'), {
+            ...driverData,
+            createdAt: serverTimestamp(),
+          });
+        }
+        setShowAddForm(false);
+        setEditingDriverId(null);
+      } catch (err) {
+        handleFirestoreError(err, editingDriverId ? OperationType.UPDATE : OperationType.CREATE, 'drivers');
       }
-      setShowAddForm(false);
-      setEditingDriverId(null);
-    } catch (err) {
-      handleFirestoreError(err, editingDriverId ? OperationType.UPDATE : OperationType.CREATE, 'drivers');
+    };
+
+    // Check if code is already taken by another driver
+    const duplicateDriver = drivers.find(d => d.id !== editingDriverId && (d.code || '').trim() === code);
+    if (duplicateDriver) {
+      triggerConfirm(
+        'تنبيه: كود مكرر!',
+        `الكود (${code}) مسجل بالفعل للسائق "${duplicateDriver.name}" (${duplicateDriver.factory || 'بدون مصنع'}).\n\nهل ترغب في حفظ السائق بهذا الكود المكرر أم تفضل إلغاء وتغيير الكود؟\n\n(💡 ملاحظة: يمكنك في أي وقت إعادة ترتيب وتعديل أكواد السائقين تسلسلياً عبر زر الإعدادات)`,
+        async () => {
+          await executeDriverSave();
+        }
+      );
+      return;
     }
+
+    await executeDriverSave();
   };
 
   const handleImportExcel = async (text: string) => {
@@ -1089,10 +1121,16 @@ export default function App() {
               </button>
               <button 
                 onClick={() => setShowSettings(true)}
-                title="الإعدادات والنسخ الاحتياطي"
-                className="p-1.5 sm:p-2 text-zinc-600 hover:text-emerald-600 transition-colors bg-zinc-50 hover:bg-emerald-50 border border-zinc-200/80 rounded-xl active:scale-95"
+                title={duplicateDriverCodesCount > 0 ? `الإعدادات (⚠️ يوجد ${duplicateDriverCodesCount} كود مكرر)` : "الإعدادات والنسخ الاحتياطي"}
+                className="relative p-1.5 sm:p-2 text-zinc-600 hover:text-emerald-600 transition-colors bg-zinc-50 hover:bg-emerald-50 border border-zinc-200/80 rounded-xl active:scale-95"
               >
                 <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
+                {duplicateDriverCodesCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-rose-500 border border-white"></span>
+                  </span>
+                )}
               </button>
               <button 
                 onClick={() => signOut(auth)}
@@ -2508,6 +2546,48 @@ export default function App() {
               </div>
 
               <div className="space-y-4">
+                {/* Driver Codes & Duplicates Management */}
+                <div className="bg-gradient-to-br from-emerald-50/70 to-zinc-50 p-4 rounded-3xl border border-emerald-100/80 shadow-2xs space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-xs font-black text-zinc-700 uppercase tracking-wider flex items-center gap-1.5">
+                      <Hash className="w-4 h-4 text-emerald-600" />
+                      إدارة وتعديل أكواد السائقين
+                    </h3>
+                    {duplicateDriverCodesCount > 0 ? (
+                      <span className="text-[10px] bg-rose-100 text-rose-700 px-2.5 py-0.5 rounded-full font-black animate-pulse flex items-center gap-1 border border-rose-200">
+                        <AlertTriangle className="w-3 h-3 text-rose-600 shrink-0" />
+                        {duplicateDriverCodesCount} كود مكرر
+                      </span>
+                    ) : (
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                        الأكواد فريدة
+                      </span>
+                    )}
+                  </div>
+                  
+                  <p className="text-[11px] text-zinc-500 leading-relaxed font-medium">
+                    فتح نافذة مخصصة لعرض السائقين، تعديل الأكواد مباشرة، حل مشكلة تكرار الأكواد، وترتيب السائقين داخل المصنع وإعادة الترقيم التسلسلي بدون تكرار.
+                  </p>
+
+                  <button 
+                    type="button"
+                    onClick={() => {
+                      setShowSettings(false);
+                      setShowCodeManager(true);
+                    }}
+                    className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-black text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-200/50 transition-all active:scale-95 group"
+                  >
+                    <Hash className="w-4 h-4 group-hover:rotate-12 transition-transform" />
+                    <span>تعديل الأكواد وحل مشكلة التكرار</span>
+                    {duplicateDriverCodesCount > 0 && (
+                      <span className="bg-rose-500 text-white text-[10px] px-2 py-0.5 rounded-full font-black mr-1">
+                        إصلاح ({duplicateDriverCodesCount})
+                      </span>
+                    )}
+                  </button>
+                </div>
+
                 {/* Month Management Helper */}
                 <div className="bg-zinc-50 p-4 rounded-3xl border border-zinc-100 space-y-4">
                   <h3 className="text-xs font-black text-zinc-400 uppercase tracking-wider">مساعد إدارة الأشهر</h3>
@@ -2990,6 +3070,16 @@ export default function App() {
               </div>
             </motion.div>
           </div>
+        )}
+
+        {showCodeManager && (
+          <DriverCodeManagerModal
+            isOpen={showCodeManager}
+            onClose={() => setShowCodeManager(false)}
+            drivers={drivers}
+            userId={user ? user.uid : ''}
+            onSuccess={(msg) => triggerSuccess('تم تحديث الأكواد', msg)}
+          />
         )}
       </AnimatePresence>
 
